@@ -1,104 +1,73 @@
-# Money Manager
+# Expense Tracker
 
-A full-stack zero-based money manager with a React frontend, Express API, and SQLite database.
+Personal expense tracker with accounts, categories, income/expense/transfer transactions, spending charts, and a full activity log. React frontend, Express API, SQLite database.
 
-## Local Development
-
-Run the API server:
+## Docker (production)
 
 ```bash
+git clone https://github.com/aliosayle/money-manager.git
+cd money-manager
+docker compose up --build -d
+```
+
+Open `http://YOUR_SERVER:3000`.
+
+Data is stored in the Docker volume `money-manager-data`.
+
+### Breaking schema upgrade
+
+If you previously ran the zero-based budget version, reset the database after pulling:
+
+```bash
+git pull
+docker compose down -v
+docker compose up --build -d
+```
+
+The `-v` flag removes the old volume (buckets/allocate schema). Without a reset, the server logs a legacy-database warning and the new API may not work correctly.
+
+### Reset database (remove all data)
+
+```bash
+docker compose down -v
+docker compose up --build -d
+```
+
+New databases start **empty** with no demo accounts or transactions.
+
+### Update after code changes
+
+```bash
+git pull
+docker compose up --build -d
+```
+
+Use `docker compose down -v` when the release notes mention a schema change.
+
+## Local development
+
+Terminal 1 — API:
+
+```bash
+npm install
 npm run dev:server
 ```
 
-Run the frontend in another terminal:
+Terminal 2 — frontend:
 
 ```bash
 npm run dev
 ```
 
-The Vite dev server proxies `/api` requests to `http://localhost:3000`.
+Vite proxies `/api` to `http://localhost:3000`.
 
-## Docker
+## Features
 
-Build and run the full app:
-
-```bash
-docker compose up --build
-```
-
-Open `http://localhost:3000`.
-
-SQLite data is stored in the `money-manager-data` Docker volume.
-# React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- Multiple accounts with balances
+- Categories with optional colors (for chart segments)
+- Expense (category required), income (optional category), and transfer between accounts
+- Dashboard with period filter (month, 30 days, year, all time)
+- Pie chart: spending by category; bar chart: monthly expenses
+- Full activity log with search, type, and category filters
+- Export data as JSON
+- Delete zero-balance accounts and unused categories

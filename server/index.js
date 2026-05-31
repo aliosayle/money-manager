@@ -11,6 +11,8 @@ const dataDir = process.env.DATA_DIR ?? path.join(projectRoot, 'data')
 const dbPath = process.env.DATABASE_PATH ?? path.join(dataDir, 'money-manager.sqlite')
 const port = Number(process.env.PORT ?? 3000)
 
+const DEFAULT_CATEGORY_COLOR = '#868e96'
+
 mkdirSync(path.dirname(dbPath), { recursive: true })
 
 const db = new Database(dbPath)
@@ -24,29 +26,39 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
-  CREATE TABLE IF NOT EXISTS buckets (
+  CREATE TABLE IF NOT EXISTS categories (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    balance_cents INTEGER NOT NULL DEFAULT 0,
+    color TEXT NOT NULL DEFAULT '${DEFAULT_CATEGORY_COLOR}',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
-    type TEXT NOT NULL CHECK (type IN ('deposit', 'withdraw', 'transfer', 'allocate', 'account')),
+    type TEXT NOT NULL CHECK (type IN ('expense', 'income', 'transfer', 'account')),
     amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
     note TEXT NOT NULL DEFAULT '',
     account_id TEXT,
     from_account_id TEXT,
     to_account_id TEXT,
-    bucket_id TEXT,
+    category_id TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL,
     FOREIGN KEY (from_account_id) REFERENCES accounts(id) ON DELETE SET NULL,
     FOREIGN KEY (to_account_id) REFERENCES accounts(id) ON DELETE SET NULL,
-    FOREIGN KEY (bucket_id) REFERENCES buckets(id) ON DELETE SET NULL
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
   );
 `)
+
+const legacyBuckets = db
+  .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='buckets'")
+  .get()
+
+if (legacyBuckets) {
+  console.warn(
+    '[money-manager] Legacy budget database detected. Reset with: docker compose down -v && docker compose up --build -d',
+  )
+}
 
 const centsToAmount = (cents) => cents / 100
 
@@ -70,19 +82,26 @@ const normalizeInitialCents = (value) => {
   return Math.round(amount * 100)
 }
 
-const getTotals = () => {
-  const accountsTotal = db
-    .prepare('SELECT COALESCE(SUM(balance_cents), 0) AS total FROM accounts')
-    .get().total
-  const bucketsTotal = db
-    .prepare('SELECT COALESCE(SUM(balance_cents), 0) AS total FROM buckets')
-    .get().total
+const getPeriodBounds = (period) => {
+  const now = new Date()
 
-  return {
-    accountsTotal,
-    bucketsTotal,
-    leftToAssign: accountsTotal - bucketsTotal,
+  if (period === 'all') {
+    return { clause: '', params: [] }
   }
+
+  if (period === '30d') {
+    const start = new Date(now)
+    start.setDate(start.getDate() - 30)
+    return { clause: 'AND datetime(created_at) >= datetime(?)', params: [start.toISOString()] }
+  }
+
+  if (period === 'year') {
+    const start = new Date(now.getFullYear(), 0, 1)
+    return { clause: 'AND datetime(created_at) >= datetime(?)', params: [start.toISOString()] }
+  }
+
+  const start = new Date(now.getFullYear(), now.getMonth(), 1)
+  return { clause: 'AND datetime(created_at) >= datetime(?)', params: [start.toISOString()] }
 }
 
 const getState = () => {
@@ -95,13 +114,13 @@ const getState = () => {
       balance: centsToAmount(account.balance_cents),
     }))
 
-  const buckets = db
-    .prepare('SELECT id, name, balance_cents FROM buckets ORDER BY created_at ASC')
+  const categories = db
+    .prepare('SELECT id, name, color FROM categories ORDER BY created_at ASC')
     .all()
-    .map((bucket) => ({
-      id: bucket.id,
-      name: bucket.name,
-      balance: centsToAmount(bucket.balance_cents),
+    .map((category) => ({
+      id: category.id,
+      name: category.name,
+      color: category.color,
     }))
 
   const transactions = db
@@ -114,7 +133,7 @@ const getState = () => {
         account_id,
         from_account_id,
         to_account_id,
-        bucket_id,
+        category_id,
         created_at
       FROM transactions
       ORDER BY datetime(created_at) DESC, rowid DESC`,
@@ -129,10 +148,103 @@ const getState = () => {
       accountId: transaction.account_id ?? undefined,
       fromAccountId: transaction.from_account_id ?? undefined,
       toAccountId: transaction.to_account_id ?? undefined,
-      bucketId: transaction.bucket_id ?? undefined,
+      categoryId: transaction.category_id ?? undefined,
     }))
 
-  return { accounts, buckets, transactions }
+  return { accounts, categories, transactions }
+}
+
+const getSummary = (period) => {
+  const { clause, params } = getPeriodBounds(period)
+
+  const incomeRow = db
+    .prepare(
+      `SELECT COALESCE(SUM(amount_cents), 0) AS total
+       FROM transactions
+       WHERE type = 'income' ${clause}`,
+    )
+    .get(...params)
+
+  const expenseRow = db
+    .prepare(
+      `SELECT COALESCE(SUM(amount_cents), 0) AS total
+       FROM transactions
+       WHERE type = 'expense' ${clause}`,
+    )
+    .get(...params)
+
+  const totalIncome = incomeRow.total
+  const totalExpenses = expenseRow.total
+
+  const expensePeriodClause = clause ? clause.replace('created_at', 't.created_at') : ''
+
+  const byCategory = db
+    .prepare(
+      `SELECT
+        c.id,
+        c.name,
+        c.color,
+        COALESCE(SUM(t.amount_cents), 0) AS total_cents
+      FROM categories c
+      LEFT JOIN transactions t
+        ON t.category_id = c.id
+        AND t.type = 'expense'
+        ${expensePeriodClause}
+      GROUP BY c.id
+      HAVING total_cents > 0
+      ORDER BY total_cents DESC`,
+    )
+    .all(...params)
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      color: row.color,
+      amount: centsToAmount(row.total_cents),
+      percent: totalExpenses > 0 ? Math.round((row.total_cents / totalExpenses) * 1000) / 10 : 0,
+    }))
+
+  const uncategorized = db
+    .prepare(
+      `SELECT COALESCE(SUM(amount_cents), 0) AS total
+       FROM transactions
+       WHERE type = 'expense' AND category_id IS NULL ${clause}`,
+    )
+    .get(...params)
+
+  if (uncategorized.total > 0) {
+    byCategory.push({
+      id: 'uncategorized',
+      name: 'Uncategorized',
+      color: DEFAULT_CATEGORY_COLOR,
+      amount: centsToAmount(uncategorized.total),
+      percent: totalExpenses > 0 ? Math.round((uncategorized.total / totalExpenses) * 1000) / 10 : 0,
+    })
+  }
+
+  const byMonth = db
+    .prepare(
+      `SELECT
+        strftime('%Y-%m', created_at) AS month,
+        COALESCE(SUM(amount_cents), 0) AS total_cents
+      FROM transactions
+      WHERE type = 'expense' ${clause}
+      GROUP BY month
+      ORDER BY month ASC`,
+    )
+    .all(...params)
+    .map((row) => ({
+      month: row.month,
+      amount: centsToAmount(row.total_cents),
+    }))
+
+  return {
+    period,
+    totalIncome: centsToAmount(totalIncome),
+    totalExpenses: centsToAmount(totalExpenses),
+    net: centsToAmount(totalIncome - totalExpenses),
+    byCategory,
+    byMonth,
+  }
 }
 
 const insertTransaction = db.prepare(`
@@ -144,7 +256,7 @@ const insertTransaction = db.prepare(`
     account_id,
     from_account_id,
     to_account_id,
-    bucket_id,
+    category_id,
     created_at
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `)
@@ -156,7 +268,7 @@ const createTransaction = ({
   accountId = null,
   fromAccountId = null,
   toAccountId = null,
-  bucketId = null,
+  categoryId = null,
 }) => {
   insertTransaction.run(
     randomUUID(),
@@ -166,41 +278,10 @@ const createTransaction = ({
     accountId,
     fromAccountId,
     toAccountId,
-    bucketId,
+    categoryId,
     new Date().toISOString(),
   )
 }
-
-const seedDatabase = () => {
-  const accountCount = db.prepare('SELECT COUNT(*) AS count FROM accounts').get().count
-
-  if (accountCount > 0) {
-    return
-  }
-
-  const insertAccount = db.prepare(
-    'INSERT INTO accounts (id, name, balance_cents, created_at) VALUES (?, ?, ?, ?)',
-  )
-  const insertBucket = db.prepare(
-    'INSERT INTO buckets (id, name, balance_cents, created_at) VALUES (?, ?, ?, ?)',
-  )
-  const now = new Date().toISOString()
-
-  db.transaction(() => {
-    insertAccount.run('checking', 'Everyday checking', 125000, now)
-    insertAccount.run('cash', 'Cash wallet', 14000, now)
-    insertBucket.run('rent', 'Rent', 90000, now)
-    insertBucket.run('food', 'Food', 26000, now)
-    insertBucket.run('savings', 'Emergency fund', 15000, now)
-    createTransaction({
-      type: 'account',
-      amountCents: 139000,
-      note: 'Starter balances added. Replace these with your own accounts and budget.',
-    })
-  })()
-}
-
-seedDatabase()
 
 const app = express()
 app.use(express.json())
@@ -213,6 +294,17 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/state', (_req, res) => {
   sendState(res)
+})
+
+app.get('/api/summary', (req, res) => {
+  const period = String(req.query.period ?? 'month')
+  const allowed = ['month', '30d', 'year', 'all']
+
+  if (!allowed.includes(period)) {
+    return res.status(400).json({ error: 'Invalid period. Use month, 30d, year, or all.' })
+  }
+
+  return res.json(getSummary(period))
 })
 
 app.post('/api/accounts', (req, res) => {
@@ -246,39 +338,21 @@ app.post('/api/accounts', (req, res) => {
   return sendState(res, 201)
 })
 
-app.post('/api/buckets', (req, res) => {
+app.post('/api/categories', (req, res) => {
   const name = String(req.body.name ?? '').trim()
-  const balanceCents = normalizeInitialCents(req.body.balance ?? 0)
+  const color = String(req.body.color ?? DEFAULT_CATEGORY_COLOR).trim() || DEFAULT_CATEGORY_COLOR
 
   if (!name) {
-    return res.status(400).json({ error: 'Give the bucket a name first.' })
+    return res.status(400).json({ error: 'Give the category a name first.' })
   }
 
-  if (balanceCents === null) {
-    return res.status(400).json({ error: 'Bucket starting balance must be zero or a positive amount.' })
-  }
-
-  if (balanceCents > getTotals().leftToAssign) {
-    return res.status(400).json({
-      error: `You only have ${centsToAmount(getTotals().leftToAssign)} left to assign.`,
-    })
-  }
-
-  db.transaction(() => {
-    const id = randomUUID()
-    db.prepare('INSERT INTO buckets (id, name, balance_cents, created_at) VALUES (?, ?, ?, ?)').run(
-      id,
-      name,
-      balanceCents,
-      new Date().toISOString(),
-    )
-    createTransaction({
-      type: 'allocate',
-      amountCents: balanceCents,
-      bucketId: id,
-      note: `${name} bucket created${balanceCents > 0 ? ` with ${centsToAmount(balanceCents)}` : ''}.`,
-    })
-  })()
+  const id = randomUUID()
+  db.prepare('INSERT INTO categories (id, name, color, created_at) VALUES (?, ?, ?, ?)').run(
+    id,
+    name,
+    color,
+    new Date().toISOString(),
+  )
 
   return sendState(res, 201)
 })
@@ -288,7 +362,7 @@ app.post('/api/transactions', (req, res) => {
   const amountCents = amountToCents(req.body.amount)
   const note = String(req.body.note ?? '').trim()
 
-  if (!['deposit', 'withdraw', 'transfer'].includes(type)) {
+  if (!['expense', 'income', 'transfer'].includes(type)) {
     return res.status(400).json({ error: 'Choose a valid transaction type.' })
   }
 
@@ -298,11 +372,46 @@ app.post('/api/transactions', (req, res) => {
 
   try {
     db.transaction(() => {
-      if (type === 'deposit') {
+      if (type === 'expense') {
         const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.body.accountId)
+        const category = req.body.categoryId
+          ? db.prepare('SELECT * FROM categories WHERE id = ?').get(req.body.categoryId)
+          : null
 
         if (!account) {
-          throw new Error('Choose an account for the deposit.')
+          throw new Error('Choose an account for this expense.')
+        }
+
+        if (!category) {
+          throw new Error('Choose a category for this expense.')
+        }
+
+        if (account.balance_cents < amountCents) {
+          throw new Error(`${account.name} only has ${centsToAmount(account.balance_cents)} available.`)
+        }
+
+        db.prepare('UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?').run(
+          amountCents,
+          account.id,
+        )
+        createTransaction({
+          type: 'expense',
+          amountCents,
+          accountId: account.id,
+          categoryId: category.id,
+          note: note || `${category.name} expense from ${account.name}.`,
+        })
+        return
+      }
+
+      if (type === 'income') {
+        const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.body.accountId)
+        const category = req.body.categoryId
+          ? db.prepare('SELECT * FROM categories WHERE id = ?').get(req.body.categoryId)
+          : null
+
+        if (!account) {
+          throw new Error('Choose an account for this income.')
         }
 
         db.prepare('UPDATE accounts SET balance_cents = balance_cents + ? WHERE id = ?').run(
@@ -310,50 +419,13 @@ app.post('/api/transactions', (req, res) => {
           account.id,
         )
         createTransaction({
-          type: 'deposit',
+          type: 'income',
           amountCents,
           accountId: account.id,
-          note: note || `Deposit into ${account.name}.`,
-        })
-        return
-      }
-
-      if (type === 'withdraw') {
-        const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.body.accountId)
-        const bucket = req.body.bucketId
-          ? db.prepare('SELECT * FROM buckets WHERE id = ?').get(req.body.bucketId)
-          : null
-
-        if (!account) {
-          throw new Error('Choose an account for the withdrawal.')
-        }
-
-        if (account.balance_cents < amountCents) {
-          throw new Error(`${account.name} only has ${centsToAmount(account.balance_cents)} available.`)
-        }
-
-        if (bucket && bucket.balance_cents < amountCents) {
-          throw new Error(`${bucket.name} only has ${centsToAmount(bucket.balance_cents)} assigned.`)
-        }
-
-        db.prepare('UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?').run(
-          amountCents,
-          account.id,
-        )
-
-        if (bucket) {
-          db.prepare('UPDATE buckets SET balance_cents = balance_cents - ? WHERE id = ?').run(
-            amountCents,
-            bucket.id,
-          )
-        }
-
-        createTransaction({
-          type: 'withdraw',
-          amountCents,
-          accountId: account.id,
-          bucketId: bucket?.id,
-          note: note || `Withdrawal from ${account.name}${bucket ? ` for ${bucket.name}` : ''}.`,
+          categoryId: category?.id ?? null,
+          note:
+            note ||
+            `${category ? category.name : 'Income'} received in ${account.name}.`,
         })
         return
       }
@@ -396,52 +468,55 @@ app.post('/api/transactions', (req, res) => {
   return sendState(res, 201)
 })
 
-app.post('/api/allocations', (req, res) => {
-  const amountCents = amountToCents(req.body.amount)
-  const direction = req.body.direction
-  const note = String(req.body.note ?? '').trim()
+app.delete('/api/accounts/:id', (req, res) => {
+  const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id)
 
-  if (!amountCents) {
-    return res.status(400).json({ error: 'Enter an allocation amount greater than zero.' })
+  if (!account) {
+    return res.status(404).json({ error: 'Account not found.' })
   }
 
-  if (!['assign', 'release'].includes(direction)) {
-    return res.status(400).json({ error: 'Choose assign or release.' })
+  if (account.balance_cents !== 0) {
+    return res.status(400).json({
+      error: `Empty ${account.name} before deleting it. Current balance: ${centsToAmount(account.balance_cents)}.`,
+    })
   }
 
-  try {
-    db.transaction(() => {
-      const bucket = db.prepare('SELECT * FROM buckets WHERE id = ?').get(req.body.bucketId)
+  db.transaction(() => {
+    db.prepare('DELETE FROM accounts WHERE id = ?').run(account.id)
+    createTransaction({
+      type: 'account',
+      amountCents: 0,
+      accountId: account.id,
+      note: `${account.name} account removed.`,
+    })
+  })()
 
-      if (!bucket) {
-        throw new Error('Choose a bucket to adjust.')
-      }
+  return sendState(res)
+})
 
-      if (direction === 'assign' && amountCents > getTotals().leftToAssign) {
-        throw new Error(`You only have ${centsToAmount(getTotals().leftToAssign)} left to assign.`)
-      }
+app.delete('/api/categories/:id', (req, res) => {
+  const category = db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.id)
 
-      if (direction === 'release' && amountCents > bucket.balance_cents) {
-        throw new Error(`${bucket.name} only has ${centsToAmount(bucket.balance_cents)} assigned.`)
-      }
-
-      const multiplier = direction === 'assign' ? 1 : -1
-      db.prepare('UPDATE buckets SET balance_cents = balance_cents + ? WHERE id = ?').run(
-        amountCents * multiplier,
-        bucket.id,
-      )
-      createTransaction({
-        type: 'allocate',
-        amountCents,
-        bucketId: bucket.id,
-        note: note || `${direction === 'assign' ? 'Assigned to' : 'Released from'} ${bucket.name}.`,
-      })
-    })()
-  } catch (error) {
-    return res.status(400).json({ error: error.message })
+  if (!category) {
+    return res.status(404).json({ error: 'Category not found.' })
   }
 
-  return sendState(res, 201)
+  const usage = db
+    .prepare(
+      `SELECT COUNT(*) AS count FROM transactions
+       WHERE category_id = ? AND type IN ('expense', 'income')`,
+    )
+    .get(category.id)
+
+  if (usage.count > 0) {
+    return res.status(400).json({
+      error: `${category.name} is used in ${usage.count} transaction(s). Remove or reassign them first.`,
+    })
+  }
+
+  db.prepare('DELETE FROM categories WHERE id = ?').run(category.id)
+
+  return sendState(res)
 })
 
 const distPath = path.join(projectRoot, 'dist')
