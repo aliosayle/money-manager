@@ -1,0 +1,15 @@
+services:
+  money-manager:
+    build: .
+    container_name: money-manager
+    environment:
+      PORT: 3000
+      DATA_DIR: /data
+    ports:
+      - "3000:3000"
+    volumes:
+      - money-manager-data:/data
+    restart: unless-stopped
+
+volumes:
+  money-manager-data:
