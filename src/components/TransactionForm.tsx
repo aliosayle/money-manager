@@ -1,4 +1,4 @@
-import { Button, SegmentedControl, Select, Stack, TextInput } from '@mantine/core'
+import { Button, Grid, SegmentedControl, Select, Stack, TextInput } from '@mantine/core'
 import { inputValue } from '../formUtils'
 import type { Account, Category, TransactionForm as TransactionFormState } from '../types'
 
@@ -29,6 +29,8 @@ export function TransactionForm({
     label: category.name,
   }))
 
+  const isTransfer = form.type === 'transfer'
+
   return (
     <form
       onSubmit={(event) => {
@@ -36,7 +38,7 @@ export function TransactionForm({
         onSubmit()
       }}
     >
-      <Stack gap="sm" className="form-panel">
+      <Stack gap="md">
         <SegmentedControl
           value={form.type}
           onChange={(value) => {
@@ -51,65 +53,81 @@ export function TransactionForm({
           ]}
         />
 
-        <TextInput
-          label="Amount"
-          required
-          inputMode="decimal"
-          value={form.amount}
-          onChange={(event) => onChange({ amount: inputValue(event) })}
-          placeholder="0.00"
-        />
-
-        {form.type === 'transfer' ? (
-          <>
-            <Select
-              label="From account"
+        <Grid>
+          <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+            <TextInput
+              label="Amount"
               required
-              searchable
-              data={accountOptions}
-              value={form.fromAccountId || null}
-              onChange={(value) => onChange({ fromAccountId: value ?? '' })}
+              inputMode="decimal"
+              value={form.amount}
+              onChange={(event) => onChange({ amount: inputValue(event) })}
+              placeholder="0.00"
             />
-            <Select
-              label="To account"
-              required
-              searchable
-              data={accountOptions}
-              value={form.toAccountId || null}
-              onChange={(value) => onChange({ toAccountId: value ?? '' })}
-            />
-          </>
-        ) : (
-          <>
-            <Select
-              label="Account"
-              required
-              searchable
-              data={accountOptions}
-              value={form.accountId || null}
-              onChange={(value) => onChange({ accountId: value ?? '' })}
-            />
-            <Select
-              label={form.type === 'expense' ? 'Category' : 'Category (optional)'}
-              required={form.type === 'expense'}
-              clearable={form.type === 'income'}
-              searchable
-              data={categoryOptions}
-              value={form.categoryId || null}
-              onChange={(value) => onChange({ categoryId: value ?? '' })}
-              disabled={categories.length === 0 && form.type === 'expense'}
-            />
-          </>
-        )}
+          </Grid.Col>
 
-        <TextInput
-          label="Note"
-          value={form.note}
-          onChange={(event) => onChange({ note: inputValue(event) })}
-          placeholder="Optional description"
-        />
+          {isTransfer ? (
+            <>
+              <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                <Select
+                  label="From account"
+                  required
+                  searchable
+                  data={accountOptions}
+                  value={form.fromAccountId || null}
+                  onChange={(value) => onChange({ fromAccountId: value ?? '' })}
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                <Select
+                  label="To account"
+                  required
+                  searchable
+                  data={accountOptions}
+                  value={form.toAccountId || null}
+                  onChange={(value) => onChange({ toAccountId: value ?? '' })}
+                />
+              </Grid.Col>
+            </>
+          ) : (
+            <>
+              <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                <Select
+                  label="Account"
+                  required
+                  searchable
+                  data={accountOptions}
+                  value={form.accountId || null}
+                  onChange={(value) => onChange({ accountId: value ?? '' })}
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                <Select
+                  label={form.type === 'expense' ? 'Category' : 'Category (optional)'}
+                  required={form.type === 'expense'}
+                  clearable={form.type === 'income'}
+                  searchable
+                  data={categoryOptions}
+                  value={form.categoryId || null}
+                  onChange={(value) => onChange({ categoryId: value ?? '' })}
+                  disabled={categories.length === 0 && form.type === 'expense'}
+                />
+              </Grid.Col>
+            </>
+          )}
 
-        <Button type="submit">{submitLabel}</Button>
+          <Grid.Col span={{ base: 12, md: isTransfer ? 12 : 4 }}>
+            <TextInput
+              label="Note"
+              value={form.note}
+              onChange={(event) => onChange({ note: inputValue(event) })}
+              placeholder="Optional description"
+            />
+          </Grid.Col>
+        </Grid>
+
+        <Button type="submit" w={{ base: '100%', sm: 'auto' }}>
+          {submitLabel}
+        </Button>
       </Stack>
     </form>
   )

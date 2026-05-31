@@ -5,11 +5,10 @@ services:
     environment:
       PORT: 3000
       DATA_DIR: /data
+      DATABASE_PATH: /data/money-manager.sqlite
     ports:
       - "3000:3000"
     volumes:
-      - money-manager-data:/data
+      # Bind mount: database survives container restarts and rebuilds (./data on the host)
+      - ./data:/data
     restart: unless-stopped
-
-volumes:
-  money-manager-data:

@@ -534,6 +534,9 @@ if (existsSync(distPath)) {
 }
 
 app.listen(port, () => {
-  console.log(`Money Manager listening on port ${port}`)
+  console.log(`Expense Tracker listening on port ${port}`)
   console.log(`Database: ${dbPath}`)
+  if (!existsSync(dbPath)) {
+    console.log('Database file will be created on first write.')
+  }
 })

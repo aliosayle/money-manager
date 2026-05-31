@@ -12,7 +12,30 @@ docker compose up --build -d
 
 Open `http://YOUR_SERVER:3000`.
 
-Data is stored in the Docker volume `money-manager-data`.
+### Data persistence
+
+The database file is stored on the host at **`./data/money-manager.sqlite`** (bind-mounted into the container). It survives:
+
+- `docker compose restart`
+- `docker compose down` then `docker compose up -d`
+- `docker compose up --build -d`
+
+Data is **only deleted** if you run `docker compose down -v` or manually delete the `data/` folder.
+
+After changing `docker-compose.yml` from a named volume to `./data`, recreate the container once (without `-v`):
+
+```bash
+docker compose down
+docker compose up --build -d
+```
+
+Your old data may still be in the previous Docker named volume `money-manager-data`. To copy it out once:
+
+```bash
+docker run --rm -v money-manager_money-manager-data:/from -v "%cd%/data":/to alpine cp /from/money-manager.sqlite /to/
+```
+
+(Use `$(pwd)/data` instead of `%cd%/data` on Linux/macOS.)
 
 ### Breaking schema upgrade
 

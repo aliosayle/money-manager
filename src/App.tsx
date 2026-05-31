@@ -520,29 +520,37 @@ function App() {
         New account
       </Title>
       <form onSubmit={handleAddAccount}>
-        <Stack gap="sm" className="form-panel">
-          <TextInput
-            label="Name"
-            required
-            value={newAccount.name}
-            onChange={(event) => {
-              const name = inputValue(event)
-              setNewAccount((c) => ({ ...c, name }))
-            }}
-            placeholder="Checking, Cash..."
-          />
-          <TextInput
-            label="Starting balance"
-            inputMode="decimal"
-            value={newAccount.balance}
-            onChange={(event) => {
-              const balance = inputValue(event)
-              setNewAccount((c) => ({ ...c, balance }))
-            }}
-            placeholder="0.00"
-            description="Optional. Leave blank for $0.00."
-          />
-          <Button type="submit">Create account</Button>
+        <Stack gap="md">
+          <Grid>
+            <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+              <TextInput
+                label="Name"
+                required
+                value={newAccount.name}
+                onChange={(event) => {
+                  const name = inputValue(event)
+                  setNewAccount((c) => ({ ...c, name }))
+                }}
+                placeholder="Checking, Cash..."
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+              <TextInput
+                label="Starting balance"
+                inputMode="decimal"
+                value={newAccount.balance}
+                onChange={(event) => {
+                  const balance = inputValue(event)
+                  setNewAccount((c) => ({ ...c, balance }))
+                }}
+                placeholder="0.00"
+                description="Optional. Leave blank for $0.00."
+              />
+            </Grid.Col>
+          </Grid>
+          <Button type="submit" w={{ base: '100%', sm: 'auto' }}>
+            Create account
+          </Button>
         </Stack>
       </form>
     </Card>
@@ -554,25 +562,36 @@ function App() {
         New category
       </Title>
       <form onSubmit={handleAddCategory}>
-        <Stack gap="sm" className="form-panel">
-          <TextInput
-            label="Name"
-            required
-            value={newCategory.name}
-            onChange={(event) => {
-              const name = inputValue(event)
-              setNewCategory((c) => ({ ...c, name }))
-            }}
-            placeholder="Groceries, Rent..."
-          />
-          <ColorInput
-            label="Chart color"
-            value={newCategory.color}
-            onChange={(value) =>
-              setNewCategory((c) => ({ ...c, color: stringFromInput(value, DEFAULT_CATEGORY_COLOR) }))
-            }
-          />
-          <Button type="submit">Create category</Button>
+        <Stack gap="md">
+          <Grid>
+            <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+              <TextInput
+                label="Name"
+                required
+                value={newCategory.name}
+                onChange={(event) => {
+                  const name = inputValue(event)
+                  setNewCategory((c) => ({ ...c, name }))
+                }}
+                placeholder="Groceries, Rent..."
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+              <ColorInput
+                label="Chart color"
+                value={newCategory.color}
+                onChange={(value) =>
+                  setNewCategory((c) => ({
+                    ...c,
+                    color: stringFromInput(value, DEFAULT_CATEGORY_COLOR),
+                  }))
+                }
+              />
+            </Grid.Col>
+          </Grid>
+          <Button type="submit" w={{ base: '100%', sm: 'auto' }}>
+            Create category
+          </Button>
         </Stack>
       </form>
     </Card>
@@ -652,67 +671,55 @@ function App() {
 
     if (activePage === 'add') {
       return (
-        <Grid gap="md">
-          <Grid.Col span={{ base: 12, md: 5, lg: 4 }}>
-            {transactionCard}
-          </Grid.Col>
+        <Stack gap="md">
+          {transactionCard}
           {hasAccounts && (
-            <Grid.Col span={{ base: 12, md: 7, lg: 8 }}>
-              <Card withBorder radius="md" h="100%">
-                <Title order={3} mb="md">
-                  Recent transactions
-                </Title>
-                {transactionsTable(moneyState.transactions.slice(0, 5))}
-              </Card>
-            </Grid.Col>
+            <Card withBorder radius="md">
+              <Title order={3} mb="md">
+                Recent transactions
+              </Title>
+              {transactionsTable(moneyState.transactions.slice(0, 5))}
+            </Card>
           )}
-        </Grid>
+        </Stack>
       )
     }
 
     if (activePage === 'accounts') {
       return (
-        <Grid>
-          <Grid.Col span={{ base: 12, lg: 8 }}>
-            <Card withBorder radius="md">
-              <Group justify="space-between" mb="md">
-                <Title order={3}>Accounts</Title>
-                <Badge>{moneyState.accounts.length} total</Badge>
-              </Group>
-              {moneyState.accounts.length === 0 ? (
-                <Text c="dimmed">No accounts yet.</Text>
-              ) : (
-                accountsTable
-              )}
-            </Card>
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, lg: 4 }}>
-            {addAccountForm}
-          </Grid.Col>
-        </Grid>
+        <Stack gap="md">
+          <Card withBorder radius="md">
+            <Group justify="space-between" mb="md">
+              <Title order={3}>Accounts</Title>
+              <Badge>{moneyState.accounts.length} total</Badge>
+            </Group>
+            {moneyState.accounts.length === 0 ? (
+              <Text c="dimmed">No accounts yet.</Text>
+            ) : (
+              accountsTable
+            )}
+          </Card>
+          {addAccountForm}
+        </Stack>
       )
     }
 
     if (activePage === 'categories') {
       return (
-        <Grid>
-          <Grid.Col span={{ base: 12, lg: 7 }}>
-            <Card withBorder radius="md">
-              <Group justify="space-between" mb="md">
-                <Title order={3}>Categories</Title>
-                <Badge>{moneyState.categories.length} total</Badge>
-              </Group>
-              {moneyState.categories.length === 0 ? (
-                <Text c="dimmed">No categories yet. Expenses require a category.</Text>
-              ) : (
-                categoriesTable
-              )}
-            </Card>
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, lg: 5 }}>
-            {addCategoryForm}
-          </Grid.Col>
-        </Grid>
+        <Stack gap="md">
+          <Card withBorder radius="md">
+            <Group justify="space-between" mb="md">
+              <Title order={3}>Categories</Title>
+              <Badge>{moneyState.categories.length} total</Badge>
+            </Group>
+            {moneyState.categories.length === 0 ? (
+              <Text c="dimmed">No categories yet. Expenses require a category.</Text>
+            ) : (
+              categoriesTable
+            )}
+          </Card>
+          {addCategoryForm}
+        </Stack>
       )
     }
 
@@ -729,8 +736,8 @@ function App() {
             Export JSON
           </Button>
         </Group>
-        <Grid className="compact-grid filters-panel" mb="md">
-          <Grid.Col span={{ base: 12, sm: 6 }}>
+        <Grid className="compact-grid" mb="md">
+          <Grid.Col span={{ base: 12, md: 6 }}>
             <TextInput
               size="xs"
               placeholder="Search note or description..."
@@ -738,7 +745,7 @@ function App() {
               onChange={(event) => setLogSearch(inputValue(event))}
             />
           </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 3 }}>
+          <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
             <Select
               size="xs"
               value={logType}
@@ -752,7 +759,7 @@ function App() {
               ]}
             />
           </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 3 }}>
+          <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
             <Select
               size="xs"
               value={logCategory}
@@ -830,7 +837,7 @@ function App() {
       </AppShell.Navbar>
 
       <AppShell.Main>
-        <Container fluid px={{ base: 'xs', sm: 'md' }} py="md" className="app-container">
+        <Container fluid px={{ base: 'xs', sm: 'md' }} py="md">
           <Stack gap="md">
             <Group justify="space-between" align="flex-start">
               <Title order={1}>{pageTitles[activePage]}</Title>
