@@ -1,4 +1,5 @@
 import { Button, NumberInput, SegmentedControl, Select, Stack, TextInput } from '@mantine/core'
+import { stringFromNumberInput } from '../formUtils'
 import type { Account, Category, TransactionForm as TransactionFormState } from '../types'
 
 type TransactionFormProps = {
@@ -38,7 +39,11 @@ export function TransactionForm({
       <Stack gap="sm">
         <SegmentedControl
           value={form.type}
-          onChange={(value) => onChange({ type: value as TransactionFormState['type'] })}
+          onChange={(value) => {
+            if (value) {
+              onChange({ type: value as TransactionFormState['type'] })
+            }
+          }}
           data={[
             { label: 'Expense', value: 'expense' },
             { label: 'Income', value: 'income' },
@@ -54,7 +59,7 @@ export function TransactionForm({
           decimalScale={2}
           fixedDecimalScale
           value={form.amount}
-          onChange={(value) => onChange({ amount: value.toString() })}
+          onChange={(value) => onChange({ amount: stringFromNumberInput(value) })}
           placeholder="0.00"
         />
 

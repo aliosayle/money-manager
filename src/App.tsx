@@ -39,6 +39,7 @@ import {
   IconWallet,
 } from '@tabler/icons-react'
 import { deleteState, fetchState, fetchSummary, formatMoney, parseAmount, postState } from './api'
+import { stringFromInput, stringFromNumberInput } from './formUtils'
 import { Dashboard } from './components/Dashboard'
 import { TransactionForm } from './components/TransactionForm'
 import type {
@@ -535,7 +536,9 @@ function App() {
             decimalScale={2}
             fixedDecimalScale
             value={newAccount.balance}
-            onChange={(value) => setNewAccount((c) => ({ ...c, balance: value.toString() }))}
+            onChange={(value) =>
+              setNewAccount((c) => ({ ...c, balance: stringFromNumberInput(value) }))
+            }
             placeholder="0.00"
           />
           <Button type="submit">Create account</Button>
@@ -561,7 +564,9 @@ function App() {
           <ColorInput
             label="Chart color"
             value={newCategory.color}
-            onChange={(value) => setNewCategory((c) => ({ ...c, color: value }))}
+            onChange={(value) =>
+              setNewCategory((c) => ({ ...c, color: stringFromInput(value, DEFAULT_CATEGORY_COLOR) }))
+            }
           />
           <Button type="submit">Create category</Button>
         </Stack>

@@ -31,7 +31,11 @@ export function Dashboard({ summary, period, onPeriodChange, loading }: Dashboar
         <SegmentedControl
           size="xs"
           value={period}
-          onChange={(value) => onPeriodChange(value as Period)}
+          onChange={(value) => {
+            if (value) {
+              onPeriodChange(value as Period)
+            }
+          }}
           data={[
             { label: 'This month', value: 'month' },
             { label: '30 days', value: '30d' },
