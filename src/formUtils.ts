@@ -1,3 +1,8 @@
+/** Read input value before a functional setState — React may null out event.currentTarget in the updater. */
+export function inputValue(event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): string {
+  return event.currentTarget.value
+}
+
 /** Mantine NumberInput passes null when the field is cleared or mid-edit. */
 export function stringFromNumberInput(value: string | number | null | undefined): string {
   if (value == null) {

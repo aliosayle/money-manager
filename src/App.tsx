@@ -525,16 +525,20 @@ function App() {
             label="Name"
             required
             value={newAccount.name}
-            onChange={(event) => setNewAccount((c) => ({ ...c, name: event.currentTarget.value }))}
+            onChange={(event) => {
+              const name = event.currentTarget.value
+              setNewAccount((c) => ({ ...c, name }))
+            }}
             placeholder="Checking, Cash..."
           />
           <TextInput
             label="Starting balance"
             inputMode="decimal"
             value={newAccount.balance}
-            onChange={(event) =>
-              setNewAccount((c) => ({ ...c, balance: event.currentTarget.value }))
-            }
+            onChange={(event) => {
+              const balance = event.currentTarget.value
+              setNewAccount((c) => ({ ...c, balance }))
+            }}
             placeholder="0.00"
             description="Optional. Leave blank for $0.00."
           />
@@ -555,7 +559,10 @@ function App() {
             label="Name"
             required
             value={newCategory.name}
-            onChange={(event) => setNewCategory((c) => ({ ...c, name: event.currentTarget.value }))}
+            onChange={(event) => {
+              const name = event.currentTarget.value
+              setNewCategory((c) => ({ ...c, name }))
+            }}
             placeholder="Groceries, Rent..."
           />
           <ColorInput
