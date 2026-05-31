@@ -128,24 +128,39 @@ function GridCharts({
         {pieData.length === 0 || totalExpenses === 0 ? (
           <Text c="dimmed">No expenses in this period.</Text>
         ) : (
-          <Stack gap="lg">
-            <Box className="chart-donut" mx="auto" w="100%" maw={280}>
+          <Group align="center" wrap="wrap" gap="xl" justify="center">
+            <Box pos="relative" w={200} h={200} style={{ flexShrink: 0 }}>
               <PieChart
                 data={pieData}
-                size={220}
-                withLabels
-                labelsPosition="inside"
-                labelsType="percent"
-                paddingAngle={3}
+                size={200}
+                withLabels={false}
+                paddingAngle={2}
                 strokeWidth={2}
-                pieProps={{ innerRadius: '58%' }}
+                pieProps={{ innerRadius: '62%' }}
                 withTooltip
                 tooltipDataSource="segment"
                 valueFormatter={(value) => formatMoney(value)}
               />
+              <Stack
+                gap={0}
+                align="center"
+                justify="center"
+                pos="absolute"
+                inset={0}
+                style={{ pointerEvents: 'none' }}
+              >
+                <Text size="xs" c="dimmed">
+                  Total
+                </Text>
+                <Text size="lg" fw={700} lh={1.2}>
+                  {formatMoney(totalExpenses)}
+                </Text>
+              </Stack>
             </Box>
-            <CategoryLegend items={pieData} />
-          </Stack>
+            <Stack gap="sm" style={{ flex: 1, minWidth: 200 }} justify="center">
+              <CategoryLegend items={pieData} />
+            </Stack>
+          </Group>
         )}
       </Card>
 
