@@ -50,6 +50,11 @@ db.exec(`
   );
 `)
 
+const transactionColumns = db.prepare('PRAGMA table_info(transactions)').all()
+if (!transactionColumns.some((column) => column.name === 'vendor')) {
+  db.exec(`ALTER TABLE transactions ADD COLUMN vendor TEXT NOT NULL DEFAULT ''`)
+}
+
 const legacyBuckets = db
   .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='buckets'")
   .get()
@@ -80,6 +85,191 @@ const normalizeInitialCents = (value) => {
   }
 
   return Math.round(amount * 100)
+}
+
+const normalizeVendor = (value) => String(value ?? '').trim()
+
+const mapTransactionRow = (transaction) => ({
+  id: transaction.id,
+  type: transaction.type,
+  amount: centsToAmount(transaction.amount_cents),
+  date: transaction.created_at,
+  note: transaction.note,
+  vendor: normalizeVendor(transaction.vendor) || undefined,
+  accountId: transaction.account_id ?? undefined,
+  fromAccountId: transaction.from_account_id ?? undefined,
+  toAccountId: transaction.to_account_id ?? undefined,
+  categoryId: transaction.category_id ?? undefined,
+})
+
+const startOfWeek = (date) => {
+  const start = new Date(date)
+  const day = start.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  start.setDate(start.getDate() + diff)
+  start.setHours(0, 0, 0, 0)
+  return start
+}
+
+const getBookRange = (granularity, offset) => {
+  const parsedOffset = Number(offset) || 0
+  const now = new Date()
+
+  if (granularity === 'month') {
+    const start = new Date(now.getFullYear(), now.getMonth() + parsedOffset, 1)
+    const end = new Date(now.getFullYear(), now.getMonth() + parsedOffset + 1, 1)
+    return { granularity, offset: parsedOffset, start, end }
+  }
+
+  const start = startOfWeek(now)
+  start.setDate(start.getDate() + parsedOffset * 7)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 7)
+
+  return { granularity: 'week', offset: parsedOffset, start, end }
+}
+
+const formatBookTitle = (granularity, start, end) => {
+  if (granularity === 'month') {
+    return start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  }
+
+  const endInclusive = new Date(end)
+  endInclusive.setDate(endInclusive.getDate() - 1)
+
+  const startLabel = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const endLabel = endInclusive.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: start.getFullYear() === endInclusive.getFullYear() ? undefined : 'numeric',
+  })
+
+  return `${startLabel} – ${endLabel}`
+}
+
+const toDateKey = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const eachDayInRange = (start, end) => {
+  const days = []
+  const cursor = new Date(start)
+
+  while (cursor < end) {
+    days.push(new Date(cursor))
+    cursor.setDate(cursor.getDate() + 1)
+  }
+
+  return days
+}
+
+const getBook = (granularity, offset) => {
+  const range = getBookRange(granularity, offset)
+  const startIso = range.start.toISOString()
+  const endIso = range.end.toISOString()
+
+  const rows = db
+    .prepare(
+      `SELECT
+        id,
+        type,
+        amount_cents,
+        note,
+        vendor,
+        account_id,
+        from_account_id,
+        to_account_id,
+        category_id,
+        created_at
+      FROM transactions
+      WHERE type IN ('expense', 'income', 'transfer')
+        AND datetime(created_at) >= datetime(?)
+        AND datetime(created_at) < datetime(?)
+      ORDER BY datetime(created_at) ASC, rowid ASC`,
+    )
+    .all(startIso, endIso)
+    .map(mapTransactionRow)
+
+  const byDate = new Map()
+  for (const transaction of rows) {
+    const key = toDateKey(new Date(transaction.date))
+    if (!byDate.has(key)) {
+      byDate.set(key, [])
+    }
+    byDate.get(key).push(transaction)
+  }
+
+  let totalIncome = 0
+  let totalExpenses = 0
+
+  const days = eachDayInRange(range.start, range.end).map((day) => {
+    const key = toDateKey(day)
+    const transactions = byDate.get(key) ?? []
+
+    let income = 0
+    let expenses = 0
+
+    for (const transaction of transactions) {
+      if (transaction.type === 'income') {
+        income += transaction.amount
+        totalIncome += transaction.amount
+      } else if (transaction.type === 'expense') {
+        expenses += transaction.amount
+        totalExpenses += transaction.amount
+      }
+    }
+
+    return {
+      date: key,
+      label: day.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      }),
+      transactions,
+      income,
+      expenses,
+    }
+  })
+
+  const byVendor = db
+    .prepare(
+      `SELECT
+        TRIM(vendor) AS vendor,
+        COALESCE(SUM(amount_cents), 0) AS total_cents,
+        COUNT(*) AS count
+      FROM transactions
+      WHERE type = 'expense'
+        AND TRIM(vendor) != ''
+        AND datetime(created_at) >= datetime(?)
+        AND datetime(created_at) < datetime(?)
+      GROUP BY TRIM(vendor)
+      ORDER BY total_cents DESC, vendor ASC`,
+    )
+    .all(startIso, endIso)
+    .map((row) => ({
+      vendor: row.vendor,
+      amount: centsToAmount(row.total_cents),
+      count: row.count,
+    }))
+
+  return {
+    granularity: range.granularity,
+    offset: range.offset,
+    title: formatBookTitle(range.granularity, range.start, range.end),
+    start: startIso,
+    end: endIso,
+    days,
+    totals: {
+      income: Math.round(totalIncome * 100) / 100,
+      expenses: Math.round(totalExpenses * 100) / 100,
+      net: Math.round((totalIncome - totalExpenses) * 100) / 100,
+    },
+    byVendor,
+  }
 }
 
 const getPeriodBounds = (period) => {
@@ -130,6 +320,7 @@ const getState = () => {
         type,
         amount_cents,
         note,
+        vendor,
         account_id,
         from_account_id,
         to_account_id,
@@ -139,17 +330,7 @@ const getState = () => {
       ORDER BY datetime(created_at) DESC, rowid DESC`,
     )
     .all()
-    .map((transaction) => ({
-      id: transaction.id,
-      type: transaction.type,
-      amount: centsToAmount(transaction.amount_cents),
-      date: transaction.created_at,
-      note: transaction.note,
-      accountId: transaction.account_id ?? undefined,
-      fromAccountId: transaction.from_account_id ?? undefined,
-      toAccountId: transaction.to_account_id ?? undefined,
-      categoryId: transaction.category_id ?? undefined,
-    }))
+    .map(mapTransactionRow)
 
   return { accounts, categories, transactions }
 }
@@ -253,18 +434,20 @@ const insertTransaction = db.prepare(`
     type,
     amount_cents,
     note,
+    vendor,
     account_id,
     from_account_id,
     to_account_id,
     category_id,
     created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `)
 
 const createTransaction = ({
   type,
   amountCents,
   note,
+  vendor = '',
   accountId = null,
   fromAccountId = null,
   toAccountId = null,
@@ -275,6 +458,7 @@ const createTransaction = ({
     type,
     amountCents,
     note ?? '',
+    normalizeVendor(vendor),
     accountId,
     fromAccountId,
     toAccountId,
@@ -305,6 +489,35 @@ app.get('/api/summary', (req, res) => {
   }
 
   return res.json(getSummary(period))
+})
+
+app.get('/api/book', (req, res) => {
+  const granularity = String(req.query.granularity ?? 'week')
+  const offset = Number(req.query.offset ?? 0)
+
+  if (!['week', 'month'].includes(granularity)) {
+    return res.status(400).json({ error: 'Invalid granularity. Use week or month.' })
+  }
+
+  if (!Number.isFinite(offset)) {
+    return res.status(400).json({ error: 'Invalid offset.' })
+  }
+
+  return res.json(getBook(granularity, offset))
+})
+
+app.get('/api/vendors', (_req, res) => {
+  const vendors = db
+    .prepare(
+      `SELECT DISTINCT TRIM(vendor) AS name
+       FROM transactions
+       WHERE TRIM(vendor) != ''
+       ORDER BY name COLLATE NOCASE ASC`,
+    )
+    .all()
+    .map((row) => row.name)
+
+  return res.json({ vendors })
 })
 
 app.post('/api/accounts', (req, res) => {
@@ -361,6 +574,7 @@ app.post('/api/transactions', (req, res) => {
   const type = req.body.type
   const amountCents = amountToCents(req.body.amount)
   const note = String(req.body.note ?? '').trim()
+  const vendor = normalizeVendor(req.body.vendor)
 
   if (!['expense', 'income', 'transfer'].includes(type)) {
     return res.status(400).json({ error: 'Choose a valid transaction type.' })
@@ -399,6 +613,7 @@ app.post('/api/transactions', (req, res) => {
           amountCents,
           accountId: account.id,
           categoryId: category.id,
+          vendor,
           note: note || `${category.name} expense from ${account.name}.`,
         })
         return
@@ -423,6 +638,7 @@ app.post('/api/transactions', (req, res) => {
           amountCents,
           accountId: account.id,
           categoryId: category?.id ?? null,
+          vendor,
           note:
             note ||
             `${category ? category.name : 'Income'} received in ${account.name}.`,

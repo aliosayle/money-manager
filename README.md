@@ -92,5 +92,7 @@ Vite proxies `/api` to `http://localhost:3000`.
 - Dashboard with period filter (month, 30 days, year, all time)
 - Pie chart: spending by category; bar chart: monthly expenses
 - Full activity log with search, type, and category filters
+- **Transaction book**: flip through weeks or months with prev/next; each day lists entries like a ledger
+- Optional **Place** on expenses/income (stores, supermarkets) with spending-by-place on the book page
 - Export data as JSON
 - Delete zero-balance accounts and unused categories

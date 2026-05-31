@@ -1,4 +1,4 @@
-import { Button, Grid, SegmentedControl, Select, Stack, TextInput } from '@mantine/core'
+import { Autocomplete, Button, Grid, SegmentedControl, Select, Stack, TextInput } from '@mantine/core'
 import { inputValue } from '../formUtils'
 import type { Account, Category, TransactionForm as TransactionFormState } from '../types'
 
@@ -6,6 +6,7 @@ type TransactionFormProps = {
   form: TransactionFormState
   accounts: Account[]
   categories: Category[]
+  vendorSuggestions?: string[]
   onChange: (patch: Partial<TransactionFormState>) => void
   onSubmit: () => void
   submitLabel?: string
@@ -15,6 +16,7 @@ export function TransactionForm({
   form,
   accounts,
   categories,
+  vendorSuggestions = [],
   onChange,
   onSubmit,
   submitLabel = 'Save transaction',
@@ -54,7 +56,7 @@ export function TransactionForm({
         />
 
         <Grid>
-          <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+          <Grid.Col span={{ base: 12, sm: 6, md: isTransfer ? 4 : 3 }}>
             <TextInput
               label="Amount"
               required
@@ -90,7 +92,7 @@ export function TransactionForm({
             </>
           ) : (
             <>
-              <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+              <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
                 <Select
                   label="Account"
                   required
@@ -100,7 +102,7 @@ export function TransactionForm({
                   onChange={(value) => onChange({ accountId: value ?? '' })}
                 />
               </Grid.Col>
-              <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+              <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
                 <Select
                   label={form.type === 'expense' ? 'Category' : 'Category (optional)'}
                   required={form.type === 'expense'}
@@ -112,10 +114,20 @@ export function TransactionForm({
                   disabled={categories.length === 0 && form.type === 'expense'}
                 />
               </Grid.Col>
+              <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+                <Autocomplete
+                  label="Place (optional)"
+                  placeholder="Store, supermarket..."
+                  data={vendorSuggestions}
+                  value={form.vendor}
+                  onChange={(value) => onChange({ vendor: value })}
+                  limit={12}
+                />
+              </Grid.Col>
             </>
           )}
 
-          <Grid.Col span={{ base: 12, md: isTransfer ? 12 : 4 }}>
+          <Grid.Col span={{ base: 12, md: isTransfer ? 12 : 8 }}>
             <TextInput
               label="Note"
               value={form.note}

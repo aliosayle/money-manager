@@ -1,4 +1,4 @@
-import type { MoneyState, Period, Summary } from './types'
+import type { BookGranularity, BookView, MoneyState, Period, Summary } from './types'
 
 export const formatMoney = (amount: number) =>
   new Intl.NumberFormat('en-US', {
@@ -37,6 +37,11 @@ export const fetchState = () => apiRequest<MoneyState>('/api/state')
 
 export const fetchSummary = (period: Period) =>
   apiRequest<Summary>(`/api/summary?period=${period}`)
+
+export const fetchBook = (granularity: BookGranularity, offset: number) =>
+  apiRequest<BookView>(`/api/book?granularity=${granularity}&offset=${offset}`)
+
+export const fetchVendors = () => apiRequest<{ vendors: string[] }>('/api/vendors')
 
 export const postState = (path: string, body: unknown) =>
   apiRequest<MoneyState>(path, {

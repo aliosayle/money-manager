@@ -18,6 +18,7 @@ export type Transaction = {
   amount: number
   date: string
   note: string
+  vendor?: string
   accountId?: string
   fromAccountId?: string
   toAccountId?: string
@@ -61,7 +62,39 @@ export type TransactionForm = {
   fromAccountId: string
   toAccountId: string
   categoryId: string
+  vendor: string
   note: string
 }
 
-export type Page = 'dashboard' | 'add' | 'accounts' | 'categories' | 'log'
+export type BookGranularity = 'week' | 'month'
+
+export type BookDay = {
+  date: string
+  label: string
+  transactions: Transaction[]
+  income: number
+  expenses: number
+}
+
+export type VendorSummary = {
+  vendor: string
+  amount: number
+  count: number
+}
+
+export type BookView = {
+  granularity: BookGranularity
+  offset: number
+  title: string
+  start: string
+  end: string
+  days: BookDay[]
+  totals: {
+    income: number
+    expenses: number
+    net: number
+  }
+  byVendor: VendorSummary[]
+}
+
+export type Page = 'dashboard' | 'book' | 'add' | 'accounts' | 'categories' | 'log'

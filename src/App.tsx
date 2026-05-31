@@ -26,6 +26,7 @@ import {
   IconArrowDownLeft,
   IconArrowRight,
   IconArrowUpRight,
+  IconBook2,
   IconCategory,
   IconCreditCard,
   IconDownload,
@@ -37,11 +38,23 @@ import {
   IconTransfer,
   IconWallet,
 } from '@tabler/icons-react'
-import { deleteState, fetchState, fetchSummary, formatMoney, parseAmount, postState } from './api'
-import { inputValue, stringFromInput } from './formUtils'
+import {
+  deleteState,
+  fetchBook,
+  fetchState,
+  fetchSummary,
+  fetchVendors,
+  formatMoney,
+  parseAmount,
+  postState,
+} from './api'
+import { Book } from './components/Book'
 import { Dashboard } from './components/Dashboard'
 import { TransactionForm } from './components/TransactionForm'
+import { inputValue, stringFromInput } from './formUtils'
 import type {
+  BookGranularity,
+  BookView,
   MoneyState,
   Page,
   Period,
@@ -53,6 +66,7 @@ import './App.css'
 
 const pages = [
   { id: 'dashboard', label: 'Dashboard', icon: IconHome },
+  { id: 'book', label: 'Book', icon: IconBook2 },
   { id: 'add', label: 'Add', icon: IconTransfer },
   { id: 'accounts', label: 'Accounts', icon: IconCreditCard },
   { id: 'categories', label: 'Categories', icon: IconCategory },
@@ -61,6 +75,7 @@ const pages = [
 
 const pageTitles: Record<Page, string> = {
   dashboard: 'Dashboard',
+  book: 'Transaction book',
   add: 'Add transaction',
   accounts: 'Accounts',
   categories: 'Categories',
@@ -80,6 +95,7 @@ const blankTransactionForm: TransactionFormState = {
   fromAccountId: '',
   toAccountId: '',
   categoryId: '',
+  vendor: '',
   note: '',
 }
 
@@ -100,6 +116,11 @@ function App() {
   const [logSearch, setLogSearch] = useState('')
   const [logType, setLogType] = useState('all')
   const [logCategory, setLogCategory] = useState('all')
+  const [bookView, setBookView] = useState<BookView | null>(null)
+  const [bookLoading, setBookLoading] = useState(false)
+  const [bookGranularity, setBookGranularity] = useState<BookGranularity>('week')
+  const [bookOffset, setBookOffset] = useState(0)
+  const [vendorSuggestions, setVendorSuggestions] = useState<string[]>([])
 
   const applyMoneyState = useCallback((state: MoneyState) => {
     setMoneyState(state)
@@ -137,10 +158,60 @@ function App() {
         }
       })
 
+    void fetchVendors()
+      .then((result) => {
+        if (!cancelled) {
+          setVendorSuggestions(result.vendors)
+        }
+      })
+      .catch(() => {})
+
     return () => {
       cancelled = true
     }
   }, [applyMoneyState])
+
+  const refreshBook = useCallback(async (granularity: BookGranularity, offset: number) => {
+    setBookLoading(true)
+    try {
+      const data = await fetchBook(granularity, offset)
+      setBookView(data)
+    } catch {
+      setBookView(null)
+    } finally {
+      setBookLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activePage !== 'book') {
+      return
+    }
+
+    let cancelled = false
+
+    void (async () => {
+      setBookLoading(true)
+      try {
+        const data = await fetchBook(bookGranularity, bookOffset)
+        if (!cancelled) {
+          setBookView(data)
+        }
+      } catch {
+        if (!cancelled) {
+          setBookView(null)
+        }
+      } finally {
+        if (!cancelled) {
+          setBookLoading(false)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activePage, bookGranularity, bookOffset, moneyState.transactions.length])
 
   useEffect(() => {
     if (activePage !== 'dashboard') {
@@ -209,15 +280,29 @@ function App() {
               amount,
               accountId: transactionForm.accountId,
               categoryId: transactionForm.categoryId || undefined,
+              vendor: transactionForm.vendor.trim() || undefined,
               note: transactionForm.note,
             }
 
+      const savedVendor = transactionForm.vendor.trim()
       const state = await postState('/api/transactions', body)
       applyMoneyState(state)
       setTransactionForm(blankTransactionForm)
       setNotice('')
+      if (savedVendor) {
+        setVendorSuggestions((current) => {
+          const next = savedVendor
+          if (current.includes(next)) {
+            return current
+          }
+          return [...current, next].sort((a, b) => a.localeCompare(b))
+        })
+      }
       if (activePage === 'dashboard') {
         void refreshSummary(period)
+      }
+      if (activePage === 'book') {
+        void refreshBook(bookGranularity, bookOffset)
       }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not save transaction.')
@@ -301,13 +386,15 @@ function App() {
     moneyState.categories.find((c) => c.id === id)?.name ?? '—'
 
   const describeTransaction = (transaction: Transaction) => {
+    const place = transaction.vendor ? `${transaction.vendor} · ` : ''
+
     if (transaction.type === 'expense') {
-      return `${categoryName(transaction.categoryId)} from ${accountName(transaction.accountId)}`
+      return `${place}${categoryName(transaction.categoryId)} from ${accountName(transaction.accountId)}`
     }
 
     if (transaction.type === 'income') {
       const cat = transaction.categoryId ? categoryName(transaction.categoryId) : 'Income'
-      return `${cat} to ${accountName(transaction.accountId)}`
+      return `${place}${cat} to ${accountName(transaction.accountId)}`
     }
 
     if (transaction.type === 'transfer') {
@@ -326,13 +413,15 @@ function App() {
     const nameForCategory = (id?: string) => categories.find((c) => c.id === id)?.name ?? '—'
 
     const labelFor = (transaction: Transaction) => {
+      const place = transaction.vendor ? `${transaction.vendor} · ` : ''
+
       if (transaction.type === 'expense') {
-        return `${nameForCategory(transaction.categoryId)} from ${nameForAccount(transaction.accountId)}`
+        return `${place}${nameForCategory(transaction.categoryId)} from ${nameForAccount(transaction.accountId)}`
       }
 
       if (transaction.type === 'income') {
         const cat = transaction.categoryId ? nameForCategory(transaction.categoryId) : 'Income'
-        return `${cat} to ${nameForAccount(transaction.accountId)}`
+        return `${place}${cat} to ${nameForAccount(transaction.accountId)}`
       }
 
       if (transaction.type === 'transfer') {
@@ -620,6 +709,7 @@ function App() {
           form={transactionForm}
           accounts={moneyState.accounts}
           categories={moneyState.categories}
+          vendorSuggestions={vendorSuggestions}
           onChange={(patch) => setTransactionForm((current) => ({ ...current, ...patch }))}
           onSubmit={handleTransactionSubmit}
         />
@@ -666,6 +756,25 @@ function App() {
             </Card>
           )}
         </Stack>
+      )
+    }
+
+    if (activePage === 'book') {
+      return (
+        <Book
+          book={bookView}
+          loading={bookLoading}
+          granularity={bookGranularity}
+          onGranularityChange={(granularity) => {
+            setBookGranularity(granularity)
+            setBookOffset(0)
+          }}
+          onPrevious={() => setBookOffset((current) => current - 1)}
+          onNext={() => setBookOffset((current) => current + 1)}
+          onToday={() => setBookOffset(0)}
+          accounts={moneyState.accounts}
+          categories={moneyState.categories}
+        />
       )
     }
 

@@ -1,0 +1,98 @@
+.book-cover {
+  background: light-dark(
+    linear-gradient(145deg, #fffef8 0%, #f8f4e8 100%),
+    linear-gradient(145deg, var(--mantine-color-dark-7) 0%, var(--mantine-color-dark-6) 100%)
+  );
+  border-color: light-dark(#e8dfc8, var(--mantine-color-dark-4)) !important;
+}
+
+.book-eyebrow {
+  letter-spacing: 0.12em;
+}
+
+.book-title {
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.book-page {
+  border-color: light-dark(#e8dfc8, var(--mantine-color-dark-4)) !important;
+  background: light-dark(#fffef8, var(--mantine-color-dark-7));
+}
+
+.book-spread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+}
+
+.book-day-header {
+  border-bottom: 1px solid light-dark(#e8dfc8, var(--mantine-color-dark-4));
+  padding-bottom: var(--mantine-spacing-xs);
+}
+
+.book-day-label {
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.book-empty-line {
+  font-style: italic;
+  padding: var(--mantine-spacing-xs) 0;
+}
+
+.book-entries {
+  border-left: 2px solid light-dark(#e8dfc8, var(--mantine-color-dark-4));
+  margin-left: 2px;
+  padding-left: var(--mantine-spacing-sm);
+}
+
+.book-entry {
+  padding: var(--mantine-spacing-xs) 0;
+  border-bottom: 1px dashed light-dark(#efe8d6, var(--mantine-color-dark-5));
+}
+
+.book-entry:last-child {
+  border-bottom: none;
+}
+
+.book-entry-time {
+  width: 4.5rem;
+  flex-shrink: 0;
+}
+
+.book-entry-amount {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.book-totals {
+  min-width: min(100%, 16rem);
+}
+
+.book-today-btn {
+  border: 1px solid light-dark(#e8dfc8, var(--mantine-color-dark-4));
+  background: light-dark(#fffef8, var(--mantine-color-dark-6));
+  color: inherit;
+  border-radius: var(--mantine-radius-md);
+  padding: 0 0.75rem;
+  height: 2.25rem;
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.book-today-btn--active {
+  border-color: var(--mantine-color-blue-filled);
+  color: var(--mantine-color-blue-filled);
+}
+
+.book-today-btn:hover {
+  background: light-dark(#f8f4e8, var(--mantine-color-dark-5));
+}
+
+@media (min-width: 62em) {
+  .book-spread {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--mantine-spacing-md);
+  }
+}
