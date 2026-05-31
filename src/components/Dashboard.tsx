@@ -1,5 +1,15 @@
 import { BarChart, PieChart } from '@mantine/charts'
-import { Card, Group, Paper, SegmentedControl, SimpleGrid, Stack, Text, Title } from '@mantine/core'
+import {
+  Box,
+  Card,
+  Group,
+  Paper,
+  SegmentedControl,
+  SimpleGrid,
+  Stack,
+  Text,
+  Title,
+} from '@mantine/core'
 import type { Period, Summary } from '../types'
 import { formatMoney } from '../api'
 
@@ -10,23 +20,36 @@ type DashboardProps = {
   loading: boolean
 }
 
+function formatMonthLabel(monthKey: string) {
+  const [year, month] = monthKey.split('-').map(Number)
+  if (!year || !month) {
+    return monthKey
+  }
+
+  return new Date(year, month - 1, 1).toLocaleDateString('en-US', {
+    month: 'short',
+    year: '2-digit',
+  })
+}
+
 export function Dashboard({ summary, period, onPeriodChange, loading }: DashboardProps) {
   const pieData =
     summary?.byCategory.map((item) => ({
       name: item.name,
       value: item.amount,
       color: item.color,
+      percent: item.percent,
     })) ?? []
 
   const barData =
     summary?.byMonth.map((item) => ({
-      month: item.month,
+      month: formatMonthLabel(item.month),
       Expenses: item.amount,
     })) ?? []
 
   return (
     <Stack gap="md">
-      <Group justify="space-between">
+      <Group justify="space-between" align="flex-end" wrap="wrap" gap="sm">
         <Title order={3}>Spending overview</Title>
         <SegmentedControl
           size="xs"
@@ -80,7 +103,7 @@ export function Dashboard({ summary, period, onPeriodChange, loading }: Dashboar
             </Paper>
           </SimpleGrid>
 
-          <GridCharts pieData={pieData} barData={barData} />
+          <GridCharts pieData={pieData} barData={barData} totalExpenses={summary.totalExpenses} />
         </>
       )}
     </Stack>
@@ -90,9 +113,11 @@ export function Dashboard({ summary, period, onPeriodChange, loading }: Dashboar
 function GridCharts({
   pieData,
   barData,
+  totalExpenses,
 }: {
-  pieData: { name: string; value: number; color: string }[]
+  pieData: { name: string; value: number; color: string; percent: number }[]
   barData: { month: string; Expenses: number }[]
+  totalExpenses: number
 }) {
   return (
     <SimpleGrid cols={{ base: 1, lg: 2 }}>
@@ -100,17 +125,27 @@ function GridCharts({
         <Title order={4} mb="md">
           By category
         </Title>
-        {pieData.length === 0 ? (
+        {pieData.length === 0 || totalExpenses === 0 ? (
           <Text c="dimmed">No expenses in this period.</Text>
         ) : (
-          <PieChart
-            data={pieData}
-            withLabelsLine
-            labelsPosition="outside"
-            labelsType="percent"
-            withTooltip
-            tooltipDataSource="segment"
-          />
+          <Stack gap="lg">
+            <Box className="chart-donut" mx="auto" w="100%" maw={280}>
+              <PieChart
+                data={pieData}
+                size={220}
+                withLabels
+                labelsPosition="inside"
+                labelsType="percent"
+                paddingAngle={3}
+                strokeWidth={2}
+                pieProps={{ innerRadius: '58%' }}
+                withTooltip
+                tooltipDataSource="segment"
+                valueFormatter={(value) => formatMoney(value)}
+              />
+            </Box>
+            <CategoryLegend items={pieData} />
+          </Stack>
         )}
       </Card>
 
@@ -122,15 +157,59 @@ function GridCharts({
           <Text c="dimmed">No expenses in this period.</Text>
         ) : (
           <BarChart
-            h={280}
+            h={300}
             data={barData}
             dataKey="month"
-            series={[{ name: 'Expenses', color: 'red.6' }]}
-            withTooltip
+            series={[{ name: 'Expenses', color: 'red.6', label: 'Expenses' }]}
+            valueFormatter={(value) => formatMoney(value)}
+            gridAxis="y"
             tickLine="y"
+            strokeDasharray="4 4"
+            withTooltip
+            maxBarWidth={52}
+            barProps={{ radius: 6 }}
+            xAxisProps={{ tickMargin: 10, minTickGap: 16 }}
+            yAxisProps={{ width: 56 }}
           />
         )}
       </Card>
     </SimpleGrid>
+  )
+}
+
+function CategoryLegend({
+  items,
+}: {
+  items: { name: string; value: number; color: string; percent: number }[]
+}) {
+  return (
+    <Stack gap={6}>
+      {items.map((item) => (
+        <Group key={item.name} justify="space-between" wrap="nowrap" gap="sm">
+          <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+            <Box
+              w={10}
+              h={10}
+              style={{
+                borderRadius: 3,
+                backgroundColor: item.color,
+                flexShrink: 0,
+              }}
+            />
+            <Text size="sm" truncate>
+              {item.name}
+            </Text>
+          </Group>
+          <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+            <Text size="sm" c="dimmed">
+              {item.percent}%
+            </Text>
+            <Text size="sm" fw={600}>
+              {formatMoney(item.value)}
+            </Text>
+          </Group>
+        </Group>
+      ))}
+    </Stack>
   )
 }

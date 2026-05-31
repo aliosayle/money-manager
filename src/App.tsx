@@ -38,7 +38,7 @@ import {
   IconWallet,
 } from '@tabler/icons-react'
 import { deleteState, fetchState, fetchSummary, formatMoney, parseAmount, postState } from './api'
-import { stringFromInput } from './formUtils'
+import { inputValue, stringFromInput } from './formUtils'
 import { Dashboard } from './components/Dashboard'
 import { TransactionForm } from './components/TransactionForm'
 import type {
@@ -520,13 +520,13 @@ function App() {
         New account
       </Title>
       <form onSubmit={handleAddAccount}>
-        <Stack gap="sm">
+        <Stack gap="sm" className="form-panel">
           <TextInput
             label="Name"
             required
             value={newAccount.name}
             onChange={(event) => {
-              const name = event.currentTarget.value
+              const name = inputValue(event)
               setNewAccount((c) => ({ ...c, name }))
             }}
             placeholder="Checking, Cash..."
@@ -536,7 +536,7 @@ function App() {
             inputMode="decimal"
             value={newAccount.balance}
             onChange={(event) => {
-              const balance = event.currentTarget.value
+              const balance = inputValue(event)
               setNewAccount((c) => ({ ...c, balance }))
             }}
             placeholder="0.00"
@@ -554,13 +554,13 @@ function App() {
         New category
       </Title>
       <form onSubmit={handleAddCategory}>
-        <Stack gap="sm">
+        <Stack gap="sm" className="form-panel">
           <TextInput
             label="Name"
             required
             value={newCategory.name}
             onChange={(event) => {
-              const name = event.currentTarget.value
+              const name = inputValue(event)
               setNewCategory((c) => ({ ...c, name }))
             }}
             placeholder="Groceries, Rent..."
@@ -652,17 +652,21 @@ function App() {
 
     if (activePage === 'add') {
       return (
-        <Stack>
-          {transactionCard}
+        <Grid gap="md">
+          <Grid.Col span={{ base: 12, md: 5, lg: 4 }}>
+            {transactionCard}
+          </Grid.Col>
           {hasAccounts && (
-            <Card withBorder radius="md">
-              <Title order={3} mb="md">
-                Recent transactions
-              </Title>
-              {transactionsTable(moneyState.transactions.slice(0, 5))}
-            </Card>
+            <Grid.Col span={{ base: 12, md: 7, lg: 8 }}>
+              <Card withBorder radius="md" h="100%">
+                <Title order={3} mb="md">
+                  Recent transactions
+                </Title>
+                {transactionsTable(moneyState.transactions.slice(0, 5))}
+              </Card>
+            </Grid.Col>
           )}
-        </Stack>
+        </Grid>
       )
     }
 
@@ -725,13 +729,13 @@ function App() {
             Export JSON
           </Button>
         </Group>
-        <Grid className="compact-grid" mb="md">
-          <Grid.Col span={{ base: 12, md: 6 }}>
+        <Grid className="compact-grid filters-panel" mb="md">
+          <Grid.Col span={{ base: 12, sm: 6 }}>
             <TextInput
               size="xs"
               placeholder="Search note or description..."
               value={logSearch}
-              onChange={(event) => setLogSearch(event.currentTarget.value)}
+              onChange={(event) => setLogSearch(inputValue(event))}
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 3 }}>
@@ -826,7 +830,7 @@ function App() {
       </AppShell.Navbar>
 
       <AppShell.Main>
-        <Container fluid px={{ base: 'xs', sm: 'md' }} py="md">
+        <Container fluid px={{ base: 'xs', sm: 'md' }} py="md" className="app-container">
           <Stack gap="md">
             <Group justify="space-between" align="flex-start">
               <Title order={1}>{pageTitles[activePage]}</Title>

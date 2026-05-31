@@ -1,5 +1,7 @@
+import type { ChangeEvent } from 'react'
+
 /** Read input value before a functional setState — React may null out event.currentTarget in the updater. */
-export function inputValue(event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): string {
+export function inputValue(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): string {
   return event.currentTarget.value
 }
 

@@ -1,4 +1,5 @@
 import { Button, SegmentedControl, Select, Stack, TextInput } from '@mantine/core'
+import { inputValue } from '../formUtils'
 import type { Account, Category, TransactionForm as TransactionFormState } from '../types'
 
 type TransactionFormProps = {
@@ -35,7 +36,7 @@ export function TransactionForm({
         onSubmit()
       }}
     >
-      <Stack gap="sm">
+      <Stack gap="sm" className="form-panel">
         <SegmentedControl
           value={form.type}
           onChange={(value) => {
@@ -55,7 +56,7 @@ export function TransactionForm({
           required
           inputMode="decimal"
           value={form.amount}
-          onChange={(event) => onChange({ amount: event.currentTarget.value })}
+          onChange={(event) => onChange({ amount: inputValue(event) })}
           placeholder="0.00"
         />
 
@@ -104,7 +105,7 @@ export function TransactionForm({
         <TextInput
           label="Note"
           value={form.note}
-          onChange={(event) => onChange({ note: event.currentTarget.value })}
+          onChange={(event) => onChange({ note: inputValue(event) })}
           placeholder="Optional description"
         />
 

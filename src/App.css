@@ -2,6 +2,39 @@
   background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8));
 }
 
+.app-container {
+  margin-inline: auto;
+  max-width: 72rem;
+}
+
+/* Keep inputs readable on wide screens — full width on mobile */
+.form-panel {
+  width: 100%;
+  max-width: 100%;
+}
+
+@media (min-width: 48em) {
+  .form-panel {
+    max-width: 26rem;
+  }
+}
+
+@media (min-width: 62em) {
+  .form-panel {
+    max-width: 28rem;
+  }
+}
+
+.filters-panel {
+  width: 100%;
+}
+
+@media (min-width: 48em) {
+  .filters-panel {
+    max-width: 42rem;
+  }
+}
+
 .compact-grid {
   --grid-gutter: var(--mantine-spacing-sm);
 }
