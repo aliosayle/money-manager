@@ -372,7 +372,7 @@ function App() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `money-manager-${new Date().toISOString().slice(0, 10)}.json`
+    link.download = `block-n201-jam3eyye-track-${new Date().toISOString().slice(0, 10)}.json`
     link.click()
     URL.revokeObjectURL(url)
   }
@@ -538,7 +538,11 @@ function App() {
           {moneyState.accounts.map((account) => (
             <Table.Tr key={account.id}>
               <Table.Td>{account.name}</Table.Td>
-              <Table.Td ta="right">{formatMoney(account.balance)}</Table.Td>
+              <Table.Td ta="right">
+                <Text c={account.balance < 0 ? 'red' : undefined} fw={account.balance < 0 ? 600 : undefined}>
+                  {formatMoney(account.balance)}
+                </Text>
+              </Table.Td>
               <Table.Td>
                 <ActionIcon
                   variant="subtle"
@@ -731,7 +735,11 @@ function App() {
         <Stack gap="md">
           {!hasAccounts && emptySetup}
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
-            <PaperSummary label="Total balance" value={formatMoney(totalBalance)} />
+            <PaperSummary
+              label="Total balance"
+              value={formatMoney(totalBalance)}
+              valueColor={totalBalance < 0 ? 'red' : undefined}
+            />
             <PaperSummary
               label="Accounts"
               value={String(moneyState.accounts.length)}
@@ -904,10 +912,10 @@ function App() {
             </ThemeIcon>
             <div>
               <Text fw={800} lh={1}>
-                Expense Tracker
+                Block N201 jam3eyye track
               </Text>
               <Text size="xs" c="dimmed" visibleFrom="xs">
-                Accounts, categories, spending
+                jam3eyye · accounts & spending
               </Text>
             </div>
           </Group>
@@ -998,17 +1006,21 @@ function PaperSummary({
   label,
   value,
   subtitle,
+  valueColor,
 }: {
   label: string
   value: string
   subtitle?: string
+  valueColor?: string
 }) {
   return (
     <Card withBorder radius="md" p="md">
       <Text size="sm" c="dimmed">
         {label}
       </Text>
-      <Title order={2}>{value}</Title>
+      <Title order={2} c={valueColor}>
+        {value}
+      </Title>
       {subtitle && (
         <Text size="xs" c="dimmed" mt={4}>
           {subtitle}

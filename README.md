@@ -1,6 +1,6 @@
-# Expense Tracker
+# Block N201 jam3eyye track
 
-Personal expense tracker with accounts, categories, income/expense/transfer transactions, spending charts, and a full activity log. React frontend, Express API, SQLite database.
+Personal expense tracker with accounts, categories, income/expense/transfer transactions, spending charts, and a full activity log. Accounts can go negative (overdraft). React frontend, Express API, SQLite database.
 
 ## Docker (production)
 

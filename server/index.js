@@ -600,10 +600,6 @@ app.post('/api/transactions', (req, res) => {
           throw new Error('Choose a category for this expense.')
         }
 
-        if (account.balance_cents < amountCents) {
-          throw new Error(`${account.name} only has ${centsToAmount(account.balance_cents)} available.`)
-        }
-
         db.prepare('UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?').run(
           amountCents,
           account.id,
@@ -655,10 +651,6 @@ app.post('/api/transactions', (req, res) => {
 
       if (fromAccount.id === toAccount.id) {
         throw new Error('Transfer accounts must be different.')
-      }
-
-      if (fromAccount.balance_cents < amountCents) {
-        throw new Error(`${fromAccount.name} only has ${centsToAmount(fromAccount.balance_cents)} available.`)
       }
 
       db.prepare('UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?').run(
@@ -750,7 +742,7 @@ if (existsSync(distPath)) {
 }
 
 app.listen(port, () => {
-  console.log(`Expense Tracker listening on port ${port}`)
+  console.log(`Block N201 jam3eyye track listening on port ${port}`)
   console.log(`Database: ${dbPath}`)
   if (!existsSync(dbPath)) {
     console.log('Database file will be created on first write.')
