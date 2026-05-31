@@ -11,7 +11,6 @@ import {
   Container,
   Grid,
   Group,
-  NumberInput,
   ScrollArea,
   Select,
   SimpleGrid,
@@ -39,7 +38,7 @@ import {
   IconWallet,
 } from '@tabler/icons-react'
 import { deleteState, fetchState, fetchSummary, formatMoney, parseAmount, postState } from './api'
-import { stringFromInput, stringFromNumberInput } from './formUtils'
+import { stringFromInput } from './formUtils'
 import { Dashboard } from './components/Dashboard'
 import { TransactionForm } from './components/TransactionForm'
 import type {
@@ -529,17 +528,15 @@ function App() {
             onChange={(event) => setNewAccount((c) => ({ ...c, name: event.currentTarget.value }))}
             placeholder="Checking, Cash..."
           />
-          <NumberInput
-            hideControls
+          <TextInput
             label="Starting balance"
-            min={0}
-            decimalScale={2}
-            fixedDecimalScale
+            inputMode="decimal"
             value={newAccount.balance}
-            onChange={(value) =>
-              setNewAccount((c) => ({ ...c, balance: stringFromNumberInput(value) }))
+            onChange={(event) =>
+              setNewAccount((c) => ({ ...c, balance: event.currentTarget.value }))
             }
             placeholder="0.00"
+            description="Optional. Leave blank for $0.00."
           />
           <Button type="submit">Create account</Button>
         </Stack>

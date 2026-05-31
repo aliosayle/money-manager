@@ -1,5 +1,4 @@
-import { Button, NumberInput, SegmentedControl, Select, Stack, TextInput } from '@mantine/core'
-import { stringFromNumberInput } from '../formUtils'
+import { Button, SegmentedControl, Select, Stack, TextInput } from '@mantine/core'
 import type { Account, Category, TransactionForm as TransactionFormState } from '../types'
 
 type TransactionFormProps = {
@@ -51,15 +50,12 @@ export function TransactionForm({
           ]}
         />
 
-        <NumberInput
-          hideControls
+        <TextInput
           label="Amount"
           required
-          min={0.01}
-          decimalScale={2}
-          fixedDecimalScale
+          inputMode="decimal"
           value={form.amount}
-          onChange={(value) => onChange({ amount: stringFromNumberInput(value) })}
+          onChange={(event) => onChange({ amount: event.currentTarget.value })}
           placeholder="0.00"
         />
 
