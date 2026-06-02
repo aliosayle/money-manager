@@ -75,9 +75,13 @@
   border-radius: var(--mantine-radius-md);
   padding: 0 0.75rem;
   height: 2.25rem;
+  max-width: 11rem;
   font-size: var(--mantine-font-size-sm);
   font-weight: 600;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .book-today-btn--active {

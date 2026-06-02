@@ -17,6 +17,7 @@ import './Book.css'
 
 type BookProps = {
   book: BookView | null
+  offset: number
   loading: boolean
   granularity: BookGranularity
   onGranularityChange: (granularity: BookGranularity) => void
@@ -29,6 +30,7 @@ type BookProps = {
 
 export function Book({
   book,
+  offset,
   loading,
   granularity,
   onGranularityChange,
@@ -62,7 +64,11 @@ export function Book({
           <ActionIcon variant="light" size="lg" onClick={onPrevious} aria-label="Previous period">
             <IconChevronLeft size={20} />
           </ActionIcon>
-          <ButtonToday onClick={onToday} active={book?.offset === 0} />
+          <ButtonToday
+            onClick={onToday}
+            active={offset === 0}
+            label={offset === 0 ? 'Today' : book?.offset === offset ? book.title : '…'}
+          />
           <ActionIcon variant="light" size="lg" onClick={onNext} aria-label="Next period">
             <IconChevronRight size={20} />
           </ActionIcon>
@@ -75,7 +81,7 @@ export function Book({
         </Card>
       )}
 
-      {!loading && book && (
+      {!loading && book && book.offset === offset && (
         <>
           <Card withBorder radius="md" className="book-page book-cover" p="lg">
             <Group justify="space-between" align="flex-start" wrap="wrap">
@@ -189,10 +195,23 @@ export function Book({
   )
 }
 
-function ButtonToday({ onClick, active }: { onClick: () => void; active?: boolean }) {
+function ButtonToday({
+  onClick,
+  active,
+  label,
+}: {
+  onClick: () => void
+  active?: boolean
+  label: string
+}) {
   return (
-    <button type="button" className={`book-today-btn${active ? ' book-today-btn--active' : ''}`} onClick={onClick}>
-      Today
+    <button
+      type="button"
+      className={`book-today-btn${active ? ' book-today-btn--active' : ''}`}
+      onClick={onClick}
+      title={label}
+    >
+      {label}
     </button>
   )
 }

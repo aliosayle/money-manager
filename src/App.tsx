@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   ActionIcon,
   Alert,
@@ -121,6 +121,7 @@ function App() {
   const [bookGranularity, setBookGranularity] = useState<BookGranularity>('week')
   const [bookOffset, setBookOffset] = useState(0)
   const [vendorSuggestions, setVendorSuggestions] = useState<string[]>([])
+  const bookRequestId = useRef(0)
 
   const applyMoneyState = useCallback((state: MoneyState) => {
     setMoneyState(state)
@@ -171,15 +172,25 @@ function App() {
     }
   }, [applyMoneyState])
 
-  const refreshBook = useCallback(async (granularity: BookGranularity, offset: number) => {
+  const loadBook = useCallback(async (granularity: BookGranularity, offset: number) => {
+    const requestId = ++bookRequestId.current
     setBookLoading(true)
+
     try {
       const data = await fetchBook(granularity, offset)
+      if (bookRequestId.current !== requestId) {
+        return
+      }
       setBookView(data)
     } catch {
+      if (bookRequestId.current !== requestId) {
+        return
+      }
       setBookView(null)
     } finally {
-      setBookLoading(false)
+      if (bookRequestId.current === requestId) {
+        setBookLoading(false)
+      }
     }
   }, [])
 
@@ -188,30 +199,8 @@ function App() {
       return
     }
 
-    let cancelled = false
-
-    void (async () => {
-      setBookLoading(true)
-      try {
-        const data = await fetchBook(bookGranularity, bookOffset)
-        if (!cancelled) {
-          setBookView(data)
-        }
-      } catch {
-        if (!cancelled) {
-          setBookView(null)
-        }
-      } finally {
-        if (!cancelled) {
-          setBookLoading(false)
-        }
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [activePage, bookGranularity, bookOffset, moneyState.transactions.length])
+    void loadBook(bookGranularity, bookOffset)
+  }, [activePage, bookGranularity, bookOffset, moneyState.transactions.length, loadBook])
 
   useEffect(() => {
     if (activePage !== 'dashboard') {
@@ -302,7 +291,7 @@ function App() {
         void refreshSummary(period)
       }
       if (activePage === 'book') {
-        void refreshBook(bookGranularity, bookOffset)
+        void loadBook(bookGranularity, bookOffset)
       }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not save transaction.')
@@ -771,6 +760,7 @@ function App() {
       return (
         <Book
           book={bookView}
+          offset={bookOffset}
           loading={bookLoading}
           granularity={bookGranularity}
           onGranularityChange={(granularity) => {
