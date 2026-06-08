@@ -1,0 +1,77 @@
+.dashboard-root {
+  --dash-income: #12b886;
+  --dash-expense: #fa5252;
+  --dash-net-positive: #0ca678;
+  --dash-net-negative: #e03131;
+  --dash-grid: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.08));
+  --dash-tooltip-bg: light-dark(#fff, var(--mantine-color-dark-7));
+  --dash-tooltip-border: light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+}
+
+.dashboard-kpi {
+  height: 100%;
+  background: light-dark(
+    linear-gradient(160deg, #ffffff 0%, #f8f9fa 100%),
+    linear-gradient(160deg, var(--mantine-color-dark-7) 0%, var(--mantine-color-dark-6) 100%)
+  );
+}
+
+.dashboard-kpi-value {
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.dashboard-chart-card {
+  overflow: hidden;
+}
+
+.dashboard-chart-title {
+  letter-spacing: -0.01em;
+}
+
+.dashboard-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.dashboard-top-expense {
+  border-radius: var(--mantine-radius-md);
+  transition: background-color 120ms ease;
+}
+
+.dashboard-top-expense:hover {
+  background: light-dark(var(--mantine-color-gray-0), rgba(255, 255, 255, 0.03));
+}
+
+.dashboard-tooltip {
+  background: var(--dash-tooltip-bg);
+  border: 1px solid var(--dash-tooltip-border);
+  border-radius: var(--mantine-radius-md);
+  padding: 0.65rem 0.75rem;
+  box-shadow: var(--mantine-shadow-md);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.dashboard-tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+.dashboard-tooltip-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.dashboard-change-up {
+  color: var(--dash-expense);
+}
+
+.dashboard-change-down {
+  color: var(--dash-income);
+}

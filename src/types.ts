@@ -46,6 +46,46 @@ export type MonthSummary = {
   amount: number
 }
 
+export type MonthFlowSummary = {
+  month: string
+  income: number
+  expenses: number
+}
+
+export type CashFlowPoint = {
+  key: string
+  label: string
+  income: number
+  expenses: number
+  net: number
+}
+
+export type AccountSpendSummary = {
+  id: string
+  name: string
+  amount: number
+  percent: number
+}
+
+export type TopExpense = {
+  id: string
+  amount: number
+  vendor?: string
+  categoryName: string
+  date: string
+  note: string
+}
+
+export type SummaryInsights = {
+  expenseCount: number
+  incomeCount: number
+  avgDailySpend: number
+  savingsRate: number | null
+  expenseChangePercent: number | null
+  comparisonLabel: string | null
+  previousExpenses: number | null
+}
+
 export type Summary = {
   period: Period
   totalIncome: number
@@ -53,6 +93,12 @@ export type Summary = {
   net: number
   byCategory: CategorySummary[]
   byMonth: MonthSummary[]
+  byMonthFlow: MonthFlowSummary[]
+  byVendor: VendorSummary[]
+  byAccount: AccountSpendSummary[]
+  cashFlow: CashFlowPoint[]
+  topExpenses: TopExpense[]
+  insights: SummaryInsights
 }
 
 export type TransactionForm = {

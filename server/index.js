@@ -410,6 +410,137 @@ const getPeriodBounds = (period) => {
   return { clause: 'AND datetime(created_at) >= datetime(?)', params: [start.toISOString()] }
 }
 
+const getPeriodDays = (period) => {
+  const now = new Date()
+
+  if (period === 'all') {
+    return null
+  }
+
+  if (period === '30d') {
+    return 30
+  }
+
+  if (period === 'year') {
+    const start = new Date(now.getFullYear(), 0, 1)
+    const days = Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+    return Math.max(days, 1)
+  }
+
+  return Math.max(now.getDate(), 1)
+}
+
+const formatCashFlowLabel = (period, key) => {
+  if (period === 'month' || period === '30d') {
+    const [year, month, day] = key.split('-').map(Number)
+    if (!year || !month || !day) {
+      return key
+    }
+
+    return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    })
+  }
+
+  const [year, month] = key.split('-').map(Number)
+  if (!year || !month) {
+    return key
+  }
+
+  return new Date(year, month - 1, 1).toLocaleDateString('en-US', {
+    month: 'short',
+    year: '2-digit',
+  })
+}
+
+const getCashFlow = (period, clause, params) => {
+  if (period === 'month' || period === '30d') {
+    return db
+      .prepare(
+        `SELECT
+          date(created_at) AS bucket,
+          COALESCE(SUM(CASE WHEN type = 'income' THEN amount_cents ELSE 0 END), 0) AS income_cents,
+          COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_cents ELSE 0 END), 0) AS expense_cents
+        FROM transactions
+        WHERE type IN ('income', 'expense') ${clause}
+        GROUP BY bucket
+        ORDER BY bucket ASC`,
+      )
+      .all(...params)
+      .map((row) => ({
+        key: row.bucket,
+        label: formatCashFlowLabel(period, row.bucket),
+        income: centsToAmount(row.income_cents),
+        expenses: centsToAmount(row.expense_cents),
+        net: centsToAmount(row.income_cents - row.expense_cents),
+      }))
+  }
+
+  return db
+    .prepare(
+      `SELECT
+        strftime('%Y-%m', created_at) AS bucket,
+        COALESCE(SUM(CASE WHEN type = 'income' THEN amount_cents ELSE 0 END), 0) AS income_cents,
+        COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_cents ELSE 0 END), 0) AS expense_cents
+      FROM transactions
+      WHERE type IN ('income', 'expense') ${clause}
+      GROUP BY bucket
+      ORDER BY bucket ASC`,
+    )
+    .all(...params)
+    .map((row) => ({
+      key: row.bucket,
+      label: formatCashFlowLabel(period, row.bucket),
+      income: centsToAmount(row.income_cents),
+      expenses: centsToAmount(row.expense_cents),
+      net: centsToAmount(row.income_cents - row.expense_cents),
+    }))
+}
+
+const getExpenseComparison = (period) => {
+  const now = new Date()
+  let previousStart
+  let previousEnd
+
+  if (period === 'month') {
+    previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    previousEnd = new Date(now.getFullYear(), now.getMonth(), 1)
+  } else if (period === '30d') {
+    previousEnd = new Date(now)
+    previousEnd.setDate(previousEnd.getDate() - 30)
+    previousStart = new Date(previousEnd)
+    previousStart.setDate(previousStart.getDate() - 30)
+  } else if (period === 'year') {
+    previousStart = new Date(now.getFullYear() - 1, 0, 1)
+    previousEnd = new Date(now.getFullYear(), 0, 1)
+  } else {
+    return null
+  }
+
+  const previousRow = db
+    .prepare(
+      `SELECT COALESCE(SUM(amount_cents), 0) AS total
+       FROM transactions
+       WHERE type = 'expense'
+         AND datetime(created_at) >= datetime(?)
+         AND datetime(created_at) < datetime(?)`,
+    )
+    .get(previousStart.toISOString(), previousEnd.toISOString())
+
+  const previousExpenses = centsToAmount(previousRow.total)
+
+  return {
+    previousExpenses,
+    label:
+      period === 'month'
+        ? 'vs last month'
+        : period === '30d'
+          ? 'vs prior 30 days'
+          : 'vs last year',
+  }
+}
+
 const getState = () => {
   const accounts = db
     .prepare('SELECT id, name, balance_cents FROM accounts ORDER BY created_at ASC')
@@ -534,13 +665,142 @@ const getSummary = (period) => {
       amount: centsToAmount(row.total_cents),
     }))
 
+  const byMonthFlow = db
+    .prepare(
+      `SELECT
+        strftime('%Y-%m', created_at) AS month,
+        COALESCE(SUM(CASE WHEN type = 'income' THEN amount_cents ELSE 0 END), 0) AS income_cents,
+        COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_cents ELSE 0 END), 0) AS expense_cents
+      FROM transactions
+      WHERE type IN ('income', 'expense') ${clause}
+      GROUP BY month
+      ORDER BY month ASC`,
+    )
+    .all(...params)
+    .map((row) => ({
+      month: row.month,
+      income: centsToAmount(row.income_cents),
+      expenses: centsToAmount(row.expense_cents),
+    }))
+
+  const byVendor = db
+    .prepare(
+      `SELECT
+        TRIM(vendor) AS vendor,
+        COALESCE(SUM(amount_cents), 0) AS total_cents,
+        COUNT(*) AS count
+      FROM transactions
+      WHERE type = 'expense'
+        AND TRIM(vendor) != '' ${clause}
+      GROUP BY TRIM(vendor)
+      ORDER BY total_cents DESC
+      LIMIT 8`,
+    )
+    .all(...params)
+    .map((row) => ({
+      vendor: row.vendor,
+      amount: centsToAmount(row.total_cents),
+      count: row.count,
+    }))
+
+  const byAccount = db
+    .prepare(
+      `SELECT
+        a.id,
+        a.name,
+        COALESCE(SUM(t.amount_cents), 0) AS total_cents
+      FROM accounts a
+      LEFT JOIN transactions t
+        ON t.account_id = a.id
+        AND t.type = 'expense'
+        ${expensePeriodClause}
+      GROUP BY a.id
+      HAVING total_cents > 0
+      ORDER BY total_cents DESC`,
+    )
+    .all(...params)
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      amount: centsToAmount(row.total_cents),
+      percent: totalExpenses > 0 ? Math.round((row.total_cents / totalExpenses) * 1000) / 10 : 0,
+    }))
+
+  const expenseClause = clause ? clause.replaceAll('created_at', 't.created_at') : ''
+
+  const topExpenses = db
+    .prepare(
+      `SELECT
+        t.id,
+        t.amount_cents,
+        t.vendor,
+        t.note,
+        t.created_at,
+        c.name AS category_name
+      FROM transactions t
+      LEFT JOIN categories c ON c.id = t.category_id
+      WHERE t.type = 'expense' ${expenseClause}
+      ORDER BY t.amount_cents DESC
+      LIMIT 5`,
+    )
+    .all(...params)
+    .map((row) => ({
+      id: row.id,
+      amount: centsToAmount(row.amount_cents),
+      vendor: normalizeVendor(row.vendor) || undefined,
+      categoryName: row.category_name ?? 'Uncategorized',
+      date: row.created_at,
+      note: row.note,
+    }))
+
+  const counts = db
+    .prepare(
+      `SELECT
+        COALESCE(SUM(CASE WHEN type = 'expense' THEN 1 ELSE 0 END), 0) AS expense_count,
+        COALESCE(SUM(CASE WHEN type = 'income' THEN 1 ELSE 0 END), 0) AS income_count
+      FROM transactions
+      WHERE type IN ('expense', 'income') ${clause}`,
+    )
+    .get(...params)
+
+  const periodDays = getPeriodDays(period)
+  const totalIncomeAmount = centsToAmount(totalIncome)
+  const totalExpensesAmount = centsToAmount(totalExpenses)
+  const comparison = getExpenseComparison(period)
+  const expenseChangePercent =
+    comparison && comparison.previousExpenses > 0
+      ? Math.round(
+          ((totalExpensesAmount - comparison.previousExpenses) / comparison.previousExpenses) * 1000,
+        ) / 10
+      : null
+
   return {
     period,
-    totalIncome: centsToAmount(totalIncome),
-    totalExpenses: centsToAmount(totalExpenses),
+    totalIncome: totalIncomeAmount,
+    totalExpenses: totalExpensesAmount,
     net: centsToAmount(totalIncome - totalExpenses),
     byCategory,
     byMonth,
+    byMonthFlow,
+    byVendor,
+    byAccount,
+    cashFlow: getCashFlow(period, clause, params),
+    topExpenses,
+    insights: {
+      expenseCount: counts.expense_count,
+      incomeCount: counts.income_count,
+      avgDailySpend:
+        periodDays && totalExpenses > 0
+          ? Math.round((totalExpensesAmount / periodDays) * 100) / 100
+          : 0,
+      savingsRate:
+        totalIncome > 0
+          ? Math.round(((totalIncome - totalExpenses) / totalIncome) * 1000) / 10
+          : null,
+      expenseChangePercent,
+      comparisonLabel: comparison?.label ?? null,
+      previousExpenses: comparison?.previousExpenses ?? null,
+    },
   }
 }
 

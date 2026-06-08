@@ -13,7 +13,6 @@ import {
   Group,
   ScrollArea,
   Select,
-  SimpleGrid,
   Stack,
   Table,
   Text,
@@ -864,20 +863,10 @@ function App() {
       return (
         <Stack gap="md">
           {!hasAccounts && emptySetup}
-          <SimpleGrid cols={{ base: 1, sm: 2 }}>
-            <PaperSummary
-              label="Total balance"
-              value={formatMoney(totalBalance)}
-              valueColor={totalBalance < 0 ? 'red' : undefined}
-            />
-            <PaperSummary
-              label="Accounts"
-              value={String(moneyState.accounts.length)}
-              subtitle={`${moneyState.categories.length} categories`}
-            />
-          </SimpleGrid>
           <Dashboard
             summary={summary}
+            accounts={moneyState.accounts}
+            totalBalance={totalBalance}
             period={period}
             onPeriodChange={setPeriod}
             loading={summaryLoading}
@@ -1155,34 +1144,6 @@ function App() {
         </Container>
       </AppShell.Main>
     </AppShell>
-  )
-}
-
-function PaperSummary({
-  label,
-  value,
-  subtitle,
-  valueColor,
-}: {
-  label: string
-  value: string
-  subtitle?: string
-  valueColor?: string
-}) {
-  return (
-    <Card withBorder radius="md" p="md">
-      <Text size="sm" c="dimmed">
-        {label}
-      </Text>
-      <Title order={2} c={valueColor}>
-        {value}
-      </Title>
-      {subtitle && (
-        <Text size="xs" c="dimmed" mt={4}>
-          {subtitle}
-        </Text>
-      )}
-    </Card>
   )
 }
 
