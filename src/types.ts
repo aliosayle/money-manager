@@ -66,6 +66,8 @@ export type TransactionForm = {
   note: string
 }
 
+export type WeekStartDay = 0 | 1 | 2 | 3 | 4 | 5 | 6
+
 export type BookGranularity = 'week' | 'month'
 
 export type BookDay = {
@@ -82,9 +84,22 @@ export type VendorSummary = {
   count: number
 }
 
+export type TransactionPayload = {
+  type: 'expense' | 'income' | 'transfer'
+  amount: number
+  accountId?: string
+  fromAccountId?: string
+  toAccountId?: string
+  categoryId?: string
+  vendor?: string
+  note?: string
+  date?: string
+}
+
 export type BookView = {
   granularity: BookGranularity
   offset: number
+  weekStartDay: WeekStartDay
   title: string
   start: string
   end: string

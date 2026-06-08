@@ -10,6 +10,8 @@ type TransactionFormProps = {
   onChange: (patch: Partial<TransactionFormState>) => void
   onSubmit: () => void
   submitLabel?: string
+  datetime?: string
+  onDatetimeChange?: (value: string) => void
 }
 
 export function TransactionForm({
@@ -20,6 +22,8 @@ export function TransactionForm({
   onChange,
   onSubmit,
   submitLabel = 'Save transaction',
+  datetime,
+  onDatetimeChange,
 }: TransactionFormProps) {
   const accountOptions = accounts.map((account) => ({
     value: account.id,
@@ -135,6 +139,18 @@ export function TransactionForm({
               placeholder="Optional description"
             />
           </Grid.Col>
+
+          {onDatetimeChange && (
+            <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+              <TextInput
+                label="Date & time"
+                type="datetime-local"
+                required
+                value={datetime ?? ''}
+                onChange={(event) => onDatetimeChange(inputValue(event))}
+              />
+            </Grid.Col>
+          )}
         </Grid>
 
         <Button type="submit" w={{ base: '100%', sm: 'auto' }}>

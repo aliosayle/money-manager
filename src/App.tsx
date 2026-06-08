@@ -40,6 +40,7 @@ import {
 } from '@tabler/icons-react'
 import {
   deleteState,
+  deleteTransaction,
   fetchBook,
   fetchState,
   fetchSummary,
@@ -47,8 +48,11 @@ import {
   formatMoney,
   parseAmount,
   postState,
+  updateTransaction,
 } from './api'
+import { getWeekStartDay, setWeekStartDay } from './bookPrefs'
 import { Book } from './components/Book'
+import { BookTransactionModal } from './components/BookTransactionModal'
 import { Dashboard } from './components/Dashboard'
 import { TransactionForm } from './components/TransactionForm'
 import { inputValue, stringFromInput } from './formUtils'
@@ -61,6 +65,7 @@ import type {
   Summary,
   Transaction,
   TransactionForm as TransactionFormState,
+  WeekStartDay,
 } from './types'
 import './App.css'
 
@@ -120,7 +125,13 @@ function App() {
   const [bookLoading, setBookLoading] = useState(false)
   const [bookGranularity, setBookGranularity] = useState<BookGranularity>('week')
   const [bookOffset, setBookOffset] = useState(0)
+  const [bookWeekStartDay, setBookWeekStartDay] = useState<WeekStartDay>(() => getWeekStartDay())
   const [vendorSuggestions, setVendorSuggestions] = useState<string[]>([])
+  const [bookModalOpen, setBookModalOpen] = useState(false)
+  const [bookModalMode, setBookModalMode] = useState<'create' | 'edit'>('create')
+  const [bookModalTransaction, setBookModalTransaction] = useState<Transaction | undefined>()
+  const [bookModalDate, setBookModalDate] = useState<string | undefined>()
+  const [bookSaving, setBookSaving] = useState(false)
   const bookRequestId = useRef(0)
 
   const applyMoneyState = useCallback((state: MoneyState) => {
@@ -172,35 +183,45 @@ function App() {
     }
   }, [applyMoneyState])
 
-  const loadBook = useCallback(async (granularity: BookGranularity, offset: number) => {
-    const requestId = ++bookRequestId.current
-    setBookLoading(true)
+  const loadBook = useCallback(
+    async (granularity: BookGranularity, offset: number, weekStartDay: WeekStartDay) => {
+      const requestId = ++bookRequestId.current
+      setBookLoading(true)
 
-    try {
-      const data = await fetchBook(granularity, offset)
-      if (bookRequestId.current !== requestId) {
-        return
+      try {
+        const data = await fetchBook(granularity, offset, weekStartDay)
+        if (bookRequestId.current !== requestId) {
+          return
+        }
+        setBookView(data)
+      } catch {
+        if (bookRequestId.current !== requestId) {
+          return
+        }
+        setBookView(null)
+      } finally {
+        if (bookRequestId.current === requestId) {
+          setBookLoading(false)
+        }
       }
-      setBookView(data)
-    } catch {
-      if (bookRequestId.current !== requestId) {
-        return
-      }
-      setBookView(null)
-    } finally {
-      if (bookRequestId.current === requestId) {
-        setBookLoading(false)
-      }
-    }
-  }, [])
+    },
+    [],
+  )
 
   useEffect(() => {
     if (activePage !== 'book') {
       return
     }
 
-    void loadBook(bookGranularity, bookOffset)
-  }, [activePage, bookGranularity, bookOffset, moneyState.transactions.length, loadBook])
+    void loadBook(bookGranularity, bookOffset, bookWeekStartDay)
+  }, [
+    activePage,
+    bookGranularity,
+    bookOffset,
+    bookWeekStartDay,
+    moneyState.transactions.length,
+    loadBook,
+  ])
 
   useEffect(() => {
     if (activePage !== 'dashboard') {
@@ -291,7 +312,7 @@ function App() {
         void refreshSummary(period)
       }
       if (activePage === 'book') {
-        void loadBook(bookGranularity, bookOffset)
+        void loadBook(bookGranularity, bookOffset, bookWeekStartDay)
       }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not save transaction.')
@@ -354,6 +375,126 @@ function App() {
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not delete category.')
     }
+  }
+
+  const openBookCreate = (dateKey: string) => {
+    setBookModalMode('create')
+    setBookModalTransaction(undefined)
+    setBookModalDate(dateKey)
+    setBookModalOpen(true)
+  }
+
+  const openBookEdit = (transaction: Transaction) => {
+    setBookModalMode('edit')
+    setBookModalTransaction(transaction)
+    setBookModalDate(undefined)
+    setBookModalOpen(true)
+  }
+
+  const closeBookModal = (force = false) => {
+    if (!force && bookSaving) {
+      return
+    }
+
+    setBookModalOpen(false)
+    setBookModalTransaction(undefined)
+    setBookModalDate(undefined)
+  }
+
+  const buildTransactionBody = (form: TransactionFormState, date: string) => {
+    const amount = parseAmount(form.amount)
+
+    if (!amount) {
+      throw new Error('Enter an amount greater than zero.')
+    }
+
+    return form.type === 'transfer'
+      ? {
+          type: 'transfer' as const,
+          amount,
+          fromAccountId: form.fromAccountId,
+          toAccountId: form.toAccountId,
+          note: form.note,
+          date,
+        }
+      : {
+          type: form.type,
+          amount,
+          accountId: form.accountId,
+          categoryId: form.categoryId || undefined,
+          vendor: form.vendor.trim() || undefined,
+          note: form.note,
+          date,
+        }
+  }
+
+  const handleBookSave = async (form: TransactionFormState, date: string) => {
+    setBookSaving(true)
+
+    try {
+      const body = buildTransactionBody(form, date)
+      const state =
+        bookModalMode === 'edit' && bookModalTransaction
+          ? await updateTransaction(bookModalTransaction.id, body)
+          : await postState('/api/transactions', body)
+
+      applyMoneyState(state)
+      setNotice('')
+      closeBookModal(true)
+
+      const savedVendor = form.vendor.trim()
+      if (savedVendor) {
+        setVendorSuggestions((current) => {
+          if (current.includes(savedVendor)) {
+            return current
+          }
+          return [...current, savedVendor].sort((a, b) => a.localeCompare(b))
+        })
+      }
+
+      if (activePage === 'dashboard') {
+        void refreshSummary(period)
+      }
+      if (activePage === 'book') {
+        void loadBook(bookGranularity, bookOffset, bookWeekStartDay)
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not save entry.')
+    } finally {
+      setBookSaving(false)
+    }
+  }
+
+  const handleBookDelete = async (transaction: Transaction) => {
+    if (!window.confirm('Delete this entry? Account balances will be updated.')) {
+      return
+    }
+
+    setBookSaving(true)
+
+    try {
+      const state = await deleteTransaction(transaction.id)
+      applyMoneyState(state)
+      setNotice('')
+      closeBookModal(true)
+
+      if (activePage === 'dashboard') {
+        void refreshSummary(period)
+      }
+      if (activePage === 'book') {
+        void loadBook(bookGranularity, bookOffset, bookWeekStartDay)
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not delete entry.')
+    } finally {
+      setBookSaving(false)
+    }
+  }
+
+  const handleWeekStartDayChange = (day: WeekStartDay) => {
+    setBookWeekStartDay(day)
+    setWeekStartDay(day)
+    setBookOffset(0)
   }
 
   const exportData = () => {
@@ -758,21 +899,46 @@ function App() {
 
     if (activePage === 'book') {
       return (
-        <Book
-          book={bookView}
-          offset={bookOffset}
-          loading={bookLoading}
-          granularity={bookGranularity}
-          onGranularityChange={(granularity) => {
-            setBookGranularity(granularity)
-            setBookOffset(0)
-          }}
-          onPrevious={() => setBookOffset((current) => current - 1)}
-          onNext={() => setBookOffset((current) => current + 1)}
-          onToday={() => setBookOffset(0)}
-          accounts={moneyState.accounts}
-          categories={moneyState.categories}
-        />
+        <>
+          <Book
+            book={bookView}
+            offset={bookOffset}
+            loading={bookLoading}
+            granularity={bookGranularity}
+            weekStartDay={bookWeekStartDay}
+            onGranularityChange={(granularity) => {
+              setBookGranularity(granularity)
+              setBookOffset(0)
+            }}
+            onWeekStartDayChange={handleWeekStartDayChange}
+            onPrevious={() => setBookOffset((current) => current - 1)}
+            onNext={() => setBookOffset((current) => current + 1)}
+            onToday={() => setBookOffset(0)}
+            accounts={moneyState.accounts}
+            categories={moneyState.categories}
+            canManageEntries={hasAccounts}
+            onAddEntry={openBookCreate}
+            onEditEntry={openBookEdit}
+            onDeleteEntry={handleBookDelete}
+          />
+          <BookTransactionModal
+            opened={bookModalOpen}
+            mode={bookModalMode}
+            transaction={bookModalTransaction}
+            defaultDate={bookModalDate}
+            accounts={moneyState.accounts}
+            categories={moneyState.categories}
+            vendorSuggestions={vendorSuggestions}
+            saving={bookSaving}
+            onClose={closeBookModal}
+            onSave={handleBookSave}
+            onDelete={
+              bookModalMode === 'edit' && bookModalTransaction
+                ? () => handleBookDelete(bookModalTransaction)
+                : undefined
+            }
+          />
+        </>
       )
     }
 

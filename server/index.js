@@ -102,31 +102,40 @@ const mapTransactionRow = (transaction) => ({
   categoryId: transaction.category_id ?? undefined,
 })
 
-const startOfWeek = (date) => {
+const normalizeWeekStartDay = (value) => {
+  const day = Number(value)
+  if (!Number.isInteger(day) || day < 0 || day > 6) {
+    return 1
+  }
+  return day
+}
+
+const startOfWeek = (date, weekStartDay = 1) => {
   const start = new Date(date)
   const day = start.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  start.setDate(start.getDate() + diff)
+  const diff = (day - weekStartDay + 7) % 7
+  start.setDate(start.getDate() - diff)
   start.setHours(0, 0, 0, 0)
   return start
 }
 
-const getBookRange = (granularity, offset) => {
+const getBookRange = (granularity, offset, weekStartDay = 1) => {
   const parsedOffset = Number(offset) || 0
+  const normalizedWeekStart = normalizeWeekStartDay(weekStartDay)
   const now = new Date()
 
   if (granularity === 'month') {
     const start = new Date(now.getFullYear(), now.getMonth() + parsedOffset, 1)
     const end = new Date(now.getFullYear(), now.getMonth() + parsedOffset + 1, 1)
-    return { granularity, offset: parsedOffset, start, end }
+    return { granularity, offset: parsedOffset, start, end, weekStartDay: normalizedWeekStart }
   }
 
-  const start = startOfWeek(now)
+  const start = startOfWeek(now, normalizedWeekStart)
   start.setDate(start.getDate() + parsedOffset * 7)
   const end = new Date(start)
   end.setDate(end.getDate() + 7)
 
-  return { granularity: 'week', offset: parsedOffset, start, end }
+  return { granularity: 'week', offset: parsedOffset, start, end, weekStartDay: normalizedWeekStart }
 }
 
 const formatBookTitle = (granularity, start, end) => {
@@ -166,8 +175,114 @@ const eachDayInRange = (start, end) => {
   return days
 }
 
-const getBook = (granularity, offset) => {
-  const range = getBookRange(granularity, offset)
+const parseTransactionDate = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return new Date().toISOString()
+  }
+
+  const parsed = new Date(value)
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null
+  }
+
+  return parsed.toISOString()
+}
+
+const applyTransactionBalances = (transaction) => {
+  const amountCents = transaction.amount_cents
+
+  if (transaction.type === 'expense') {
+    db.prepare('UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?').run(
+      amountCents,
+      transaction.account_id,
+    )
+    return
+  }
+
+  if (transaction.type === 'income') {
+    db.prepare('UPDATE accounts SET balance_cents = balance_cents + ? WHERE id = ?').run(
+      amountCents,
+      transaction.account_id,
+    )
+    return
+  }
+
+  if (transaction.type === 'transfer') {
+    db.prepare('UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?').run(
+      amountCents,
+      transaction.from_account_id,
+    )
+    db.prepare('UPDATE accounts SET balance_cents = balance_cents + ? WHERE id = ?').run(
+      amountCents,
+      transaction.to_account_id,
+    )
+  }
+}
+
+const reverseTransactionBalances = (transaction) => {
+  const amountCents = transaction.amount_cents
+
+  if (transaction.type === 'expense') {
+    db.prepare('UPDATE accounts SET balance_cents = balance_cents + ? WHERE id = ?').run(
+      amountCents,
+      transaction.account_id,
+    )
+    return
+  }
+
+  if (transaction.type === 'income') {
+    db.prepare('UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?').run(
+      amountCents,
+      transaction.account_id,
+    )
+    return
+  }
+
+  if (transaction.type === 'transfer') {
+    db.prepare('UPDATE accounts SET balance_cents = balance_cents + ? WHERE id = ?').run(
+      amountCents,
+      transaction.from_account_id,
+    )
+    db.prepare('UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?').run(
+      amountCents,
+      transaction.to_account_id,
+    )
+  }
+}
+
+const getEditableTransaction = (id) => {
+  const transaction = db
+    .prepare(
+      `SELECT
+        id,
+        type,
+        amount_cents,
+        note,
+        vendor,
+        account_id,
+        from_account_id,
+        to_account_id,
+        category_id,
+        created_at
+      FROM transactions
+      WHERE id = ?`,
+    )
+    .get(id)
+
+  if (!transaction) {
+    return null
+  }
+
+  if (!['expense', 'income', 'transfer'].includes(transaction.type)) {
+    return null
+  }
+
+  return transaction
+}
+
+const getBook = (granularity, offset, weekStartDay = 1) => {
+  const range = getBookRange(granularity, offset, weekStartDay)
   const startIso = range.start.toISOString()
   const endIso = range.end.toISOString()
 
@@ -259,6 +374,7 @@ const getBook = (granularity, offset) => {
   return {
     granularity: range.granularity,
     offset: range.offset,
+    weekStartDay: range.weekStartDay,
     title: formatBookTitle(range.granularity, range.start, range.end),
     start: startIso,
     end: endIso,
@@ -452,6 +568,7 @@ const createTransaction = ({
   fromAccountId = null,
   toAccountId = null,
   categoryId = null,
+  createdAt = new Date().toISOString(),
 }) => {
   insertTransaction.run(
     randomUUID(),
@@ -463,7 +580,7 @@ const createTransaction = ({
     fromAccountId,
     toAccountId,
     categoryId,
-    new Date().toISOString(),
+    createdAt,
   )
 }
 
@@ -494,6 +611,7 @@ app.get('/api/summary', (req, res) => {
 app.get('/api/book', (req, res) => {
   const granularity = String(req.query.granularity ?? 'week')
   const offset = Number(req.query.offset ?? 0)
+  const weekStartDay = normalizeWeekStartDay(req.query.weekStartDay ?? 1)
 
   if (!['week', 'month'].includes(granularity)) {
     return res.status(400).json({ error: 'Invalid granularity. Use week or month.' })
@@ -503,7 +621,7 @@ app.get('/api/book', (req, res) => {
     return res.status(400).json({ error: 'Invalid offset.' })
   }
 
-  return res.json(getBook(granularity, offset))
+  return res.json(getBook(granularity, offset, weekStartDay))
 })
 
 app.get('/api/vendors', (_req, res) => {
@@ -570,110 +688,188 @@ app.post('/api/categories', (req, res) => {
   return sendState(res, 201)
 })
 
-app.post('/api/transactions', (req, res) => {
-  const type = req.body.type
-  const amountCents = amountToCents(req.body.amount)
-  const note = String(req.body.note ?? '').trim()
-  const vendor = normalizeVendor(req.body.vendor)
+const buildTransactionPayload = (body) => {
+  const type = body.type
+  const amountCents = amountToCents(body.amount)
+  const note = String(body.note ?? '').trim()
+  const vendor = normalizeVendor(body.vendor)
+  const createdAt = parseTransactionDate(body.date)
 
   if (!['expense', 'income', 'transfer'].includes(type)) {
-    return res.status(400).json({ error: 'Choose a valid transaction type.' })
+    throw new Error('Choose a valid transaction type.')
   }
 
   if (!amountCents) {
-    return res.status(400).json({ error: 'Enter an amount greater than zero.' })
+    throw new Error('Enter an amount greater than zero.')
   }
 
+  if (!createdAt) {
+    throw new Error('Choose a valid date and time.')
+  }
+
+  if (type === 'expense') {
+    const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(body.accountId)
+    const category = body.categoryId
+      ? db.prepare('SELECT * FROM categories WHERE id = ?').get(body.categoryId)
+      : null
+
+    if (!account) {
+      throw new Error('Choose an account for this expense.')
+    }
+
+    if (!category) {
+      throw new Error('Choose a category for this expense.')
+    }
+
+    return {
+      type: 'expense',
+      amountCents,
+      accountId: account.id,
+      fromAccountId: null,
+      toAccountId: null,
+      categoryId: category.id,
+      vendor,
+      note: note || `${category.name} expense from ${account.name}.`,
+      createdAt,
+    }
+  }
+
+  if (type === 'income') {
+    const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(body.accountId)
+    const category = body.categoryId
+      ? db.prepare('SELECT * FROM categories WHERE id = ?').get(body.categoryId)
+      : null
+
+    if (!account) {
+      throw new Error('Choose an account for this income.')
+    }
+
+    return {
+      type: 'income',
+      amountCents,
+      accountId: account.id,
+      fromAccountId: null,
+      toAccountId: null,
+      categoryId: category?.id ?? null,
+      vendor,
+      note: note || `${category ? category.name : 'Income'} received in ${account.name}.`,
+      createdAt,
+    }
+  }
+
+  const fromAccount = db.prepare('SELECT * FROM accounts WHERE id = ?').get(body.fromAccountId)
+  const toAccount = db.prepare('SELECT * FROM accounts WHERE id = ?').get(body.toAccountId)
+
+  if (!fromAccount || !toAccount) {
+    throw new Error('Choose both transfer accounts.')
+  }
+
+  if (fromAccount.id === toAccount.id) {
+    throw new Error('Transfer accounts must be different.')
+  }
+
+  return {
+    type: 'transfer',
+    amountCents,
+    accountId: null,
+    fromAccountId: fromAccount.id,
+    toAccountId: toAccount.id,
+    categoryId: null,
+    vendor: '',
+    note: note || `Transfer from ${fromAccount.name} to ${toAccount.name}.`,
+    createdAt,
+  }
+}
+
+app.post('/api/transactions', (req, res) => {
   try {
     db.transaction(() => {
-      if (type === 'expense') {
-        const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.body.accountId)
-        const category = req.body.categoryId
-          ? db.prepare('SELECT * FROM categories WHERE id = ?').get(req.body.categoryId)
-          : null
-
-        if (!account) {
-          throw new Error('Choose an account for this expense.')
-        }
-
-        if (!category) {
-          throw new Error('Choose a category for this expense.')
-        }
-
-        db.prepare('UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?').run(
-          amountCents,
-          account.id,
-        )
-        createTransaction({
-          type: 'expense',
-          amountCents,
-          accountId: account.id,
-          categoryId: category.id,
-          vendor,
-          note: note || `${category.name} expense from ${account.name}.`,
-        })
-        return
-      }
-
-      if (type === 'income') {
-        const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.body.accountId)
-        const category = req.body.categoryId
-          ? db.prepare('SELECT * FROM categories WHERE id = ?').get(req.body.categoryId)
-          : null
-
-        if (!account) {
-          throw new Error('Choose an account for this income.')
-        }
-
-        db.prepare('UPDATE accounts SET balance_cents = balance_cents + ? WHERE id = ?').run(
-          amountCents,
-          account.id,
-        )
-        createTransaction({
-          type: 'income',
-          amountCents,
-          accountId: account.id,
-          categoryId: category?.id ?? null,
-          vendor,
-          note:
-            note ||
-            `${category ? category.name : 'Income'} received in ${account.name}.`,
-        })
-        return
-      }
-
-      const fromAccount = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.body.fromAccountId)
-      const toAccount = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.body.toAccountId)
-
-      if (!fromAccount || !toAccount) {
-        throw new Error('Choose both transfer accounts.')
-      }
-
-      if (fromAccount.id === toAccount.id) {
-        throw new Error('Transfer accounts must be different.')
-      }
-
-      db.prepare('UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?').run(
-        amountCents,
-        fromAccount.id,
-      )
-      db.prepare('UPDATE accounts SET balance_cents = balance_cents + ? WHERE id = ?').run(
-        amountCents,
-        toAccount.id,
-      )
-      createTransaction({
-        type: 'transfer',
-        amountCents,
-        fromAccountId: fromAccount.id,
-        toAccountId: toAccount.id,
-        note: note || `Transfer from ${fromAccount.name} to ${toAccount.name}.`,
+      const payload = buildTransactionPayload(req.body)
+      applyTransactionBalances({
+        type: payload.type,
+        amount_cents: payload.amountCents,
+        account_id: payload.accountId,
+        from_account_id: payload.fromAccountId,
+        to_account_id: payload.toAccountId,
       })
+      createTransaction(payload)
     })()
   } catch (error) {
     return res.status(400).json({ error: error.message })
   }
 
   return sendState(res, 201)
+})
+
+app.put('/api/transactions/:id', (req, res) => {
+  const existing = getEditableTransaction(req.params.id)
+
+  if (!existing) {
+    return res.status(404).json({ error: 'Transaction not found.' })
+  }
+
+  try {
+    db.transaction(() => {
+      reverseTransactionBalances(existing)
+      const payload = buildTransactionPayload(req.body)
+
+      db.prepare(
+        `UPDATE transactions
+         SET type = ?,
+             amount_cents = ?,
+             note = ?,
+             vendor = ?,
+             account_id = ?,
+             from_account_id = ?,
+             to_account_id = ?,
+             category_id = ?,
+             created_at = ?
+         WHERE id = ?`,
+      ).run(
+        payload.type,
+        payload.amountCents,
+        payload.note,
+        normalizeVendor(payload.vendor),
+        payload.accountId,
+        payload.fromAccountId,
+        payload.toAccountId,
+        payload.categoryId,
+        payload.createdAt,
+        existing.id,
+      )
+
+      applyTransactionBalances({
+        type: payload.type,
+        amount_cents: payload.amountCents,
+        account_id: payload.accountId,
+        from_account_id: payload.fromAccountId,
+        to_account_id: payload.toAccountId,
+      })
+    })()
+  } catch (error) {
+    return res.status(400).json({ error: error.message })
+  }
+
+  return sendState(res)
+})
+
+app.delete('/api/transactions/:id', (req, res) => {
+  const existing = getEditableTransaction(req.params.id)
+
+  if (!existing) {
+    return res.status(404).json({ error: 'Transaction not found.' })
+  }
+
+  try {
+    db.transaction(() => {
+      reverseTransactionBalances(existing)
+      db.prepare('DELETE FROM transactions WHERE id = ?').run(existing.id)
+    })()
+  } catch (error) {
+    return res.status(400).json({ error: error.message })
+  }
+
+  return sendState(res)
 })
 
 app.delete('/api/accounts/:id', (req, res) => {
